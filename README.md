@@ -10,7 +10,7 @@
 ## Descripcion general
 
 Este repositorio contiene dos plugins de Moodle que trabajan en conjunto para proteger
-los paquetes SCORM de un sitio educativo. La solucion permite que los administradores
+los paquetes SCORM. La solucion permite que los administradores
 controlen quienes pueden descargar, descomprimir o eliminar los paquetes SCORM, sin
 modificar ningun archivo del nucleo de Moodle.
 
