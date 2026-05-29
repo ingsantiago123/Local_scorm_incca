@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<XMLDB PATH="local/scorm_incca/db" VERSION="20260526" COMMENT="Tablas del plugin local_scorm_incca">
+  <TABLES>
+
+    <TABLE NAME="local_scorm_incca_items" COMMENT="Registro de paquetes SCORM y su estado de proteccion">
+      <FIELDS>
+        <FIELD NAME="id"           TYPE="int"  LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="cmid"         TYPE="int"  LENGTH="10" NOTNULL="true" COMMENT="Course module id"/>
+        <FIELD NAME="scormid"      TYPE="int"  LENGTH="10" NOTNULL="true" COMMENT="Id en tabla mdl_scorm"/>
+        <FIELD NAME="courseid"     TYPE="int"  LENGTH="10" NOTNULL="true"/>
+        <FIELD NAME="creatorid"    TYPE="int"  LENGTH="10" NOTNULL="true" COMMENT="Usuario que creo la actividad"/>
+        <FIELD NAME="isprotected"  TYPE="int"  LENGTH="1"  NOTNULL="true" DEFAULT="0"/>
+        <FIELD NAME="timecreated"  TYPE="int"  LENGTH="10" NOTNULL="true" DEFAULT="0"/>
+        <FIELD NAME="timemodified" TYPE="int"  LENGTH="10" NOTNULL="true" DEFAULT="0"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="cmid"    TYPE="unique"  FIELDS="cmid"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="isprotected" UNIQUE="false" FIELDS="isprotected"/>
+        <INDEX NAME="creatorid"   UNIQUE="false" FIELDS="creatorid"/>
+      </INDEXES>
+    </TABLE>
+
+    <TABLE NAME="local_scorm_incca_logs" COMMENT="Logs de depuracion del plugin">
+      <FIELDS>
+        <FIELD NAME="id"          TYPE="int"  LENGTH="10"   NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="eventtype"   TYPE="char" LENGTH="64"   NOTNULL="true" COMMENT="upload_protected|upload_public|download_allowed|download_blocked|error"/>
+        <FIELD NAME="userid"      TYPE="int"  LENGTH="10"   NOTNULL="true" DEFAULT="0"/>
+        <FIELD NAME="cmid"        TYPE="int"  LENGTH="10"   NOTNULL="false"/>
+        <FIELD NAME="message"     TYPE="text" NOTNULL="false"/>
+        <FIELD NAME="ipaddress"   TYPE="char" LENGTH="45"   NOTNULL="false"/>
+        <FIELD NAME="timecreated" TYPE="int"  LENGTH="10"   NOTNULL="true" DEFAULT="0"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="eventtype"   UNIQUE="false" FIELDS="eventtype"/>
+        <INDEX NAME="timecreated" UNIQUE="false" FIELDS="timecreated"/>
+        <INDEX NAME="cmid"        UNIQUE="false" FIELDS="cmid"/>
+      </INDEXES>
+    </TABLE>
+
+  </TABLES>
+</XMLDB>
