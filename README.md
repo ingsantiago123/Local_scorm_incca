@@ -171,5 +171,6 @@ Los SCORMs, cursos, usuarios y archivos no se ven afectados por la desinstalaci�
 
 Cada plugin incluye su propio archivo README con la documentación técnica detallada:
 
-- local_scorm_incca/README.md — arquitectura de interceptación, hooks, observadores de eventos, esquema de base de datos, tipos de log, estructura de archivos.
-- block_scorm_incca/README.md — capabilities del bloque y comportamiento según permisos.
+- [`local_scorm_incca/README.md`](local_scorm_incca/README.md) — arquitectura de interceptación, hooks, observadores de eventos, esquema de base de datos, tipos de log, estructura de archivos.
+- [`block_scorm_incca/README.md`](block_scorm_incca/README.md) — capabilities del bloque y comportamiento según permisos.
+
