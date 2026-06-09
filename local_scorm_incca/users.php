@@ -12,8 +12,8 @@ $PAGE->set_heading(get_string('users_with_caps', 'local_scorm_incca'));
 echo $OUTPUT->header();
 
 $caps = [
-    'local/scorm_incca:cargar'    => get_string('cap_cargar', 'local_scorm_incca'),
-    'local/scorm_incca:descargar' => get_string('cap_descargar', 'local_scorm_incca'),
+    'local/scorm_incca:upload'   => get_string('cap_cargar',   'local_scorm_incca'),
+    'local/scorm_incca:download' => get_string('cap_descargar', 'local_scorm_incca'),
 ];
 
 echo html_writer::tag('p', get_string('users_with_caps_help', 'local_scorm_incca'));

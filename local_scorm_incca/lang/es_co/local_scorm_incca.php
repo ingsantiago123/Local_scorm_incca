@@ -1,15 +1,13 @@
 <?php
 defined('MOODLE_INTERNAL') || die();
 
-// Moodle uses 'es' as the base Spanish locale. For Colombian Spanish, see lang/es_co/.
-
 $string['pluginname'] = 'SCORM INCCA - Control de descarga';
 
 // Capabilities.
 $string['scorm_incca:upload']         = 'Cargar paquetes SCORM como protegidos';
 $string['scorm_incca:download']       = 'Descargar paquetes SCORM protegidos';
 $string['scorm_incca:backup']         = 'Crear copias de seguridad de cursos con SCORMs protegidos';
-$string['scorm_incca:viewadminpanel'] = 'Ver el panel de administracion del plugin';
+$string['scorm_incca:viewadminpanel'] = 'Ver el panel de administración del plugin';
 
 $string['cap_cargar']    = 'Usuarios autorizados a SUBIR SCORMs como protegidos';
 $string['cap_descargar'] = 'Usuarios autorizados a DESCARGAR SCORMs protegidos';
@@ -24,7 +22,7 @@ $string['unzipdenied']    = 'No tiene permisos para descomprimir este paquete SC
 
 // Navigation.
 $string['protected_list']       = 'Paquetes SCORM registrados';
-$string['logs']                 = 'Logs de depuracion';
+$string['logs']                 = 'Registros de depuración';
 $string['users_with_caps']      = 'Usuarios con permisos personalizados';
 $string['users_with_caps_help'] = 'Listado de usuarios que tienen asignados los roles con los permisos personalizados del plugin.';
 
@@ -37,16 +35,16 @@ $string['th_created'] = 'Creado';
 $string['th_actions'] = 'Acciones';
 
 $string['protected_badge'] = 'Protegido';
-$string['public_badge']    = 'Publico';
+$string['public_badge']    = 'Público';
 
 $string['filter_protected'] = 'Solo protegidos';
-$string['filter_public']    = 'Solo publicos';
+$string['filter_public']    = 'Solo públicos';
 $string['filter_all']       = 'Todos';
 $string['filter']           = 'Filtrar';
 $string['filter_by_cmid']   = 'Filtrar por cmid';
 
 $string['no_records'] = 'No hay paquetes SCORM registrados para el filtro seleccionado.';
-$string['view_logs']  = 'Ver logs';
+$string['view_logs']  = 'Ver registros';
 
 // Logs table headers.
 $string['th_when']      = 'Fecha';
@@ -55,21 +53,21 @@ $string['th_user']      = 'Usuario';
 $string['th_cmid']      = 'cmid';
 $string['th_ip']        = 'IP';
 $string['th_message']   = 'Mensaje';
-$string['th_email']     = 'Email';
+$string['th_email']     = 'Correo electrónico';
 $string['th_role']      = 'Rol';
 
-$string['no_logs']           = 'No hay registros de log para los filtros seleccionados.';
+$string['no_logs']           = 'No hay registros para los filtros seleccionados.';
 $string['no_users_with_cap'] = 'No hay usuarios asignados con esta capacidad.';
 
 // Log event type labels.
-$string['log_upload_protected']  = 'Subida (protegido)';
-$string['log_upload_public']     = 'Subida (publico)';
+$string['log_upload_protected']  = 'Carga (protegido)';
+$string['log_upload_public']     = 'Carga (público)';
 $string['log_download_allowed']  = 'Descarga permitida';
 $string['log_download_blocked']  = 'Descarga bloqueada';
 $string['log_deleted']           = 'Eliminado';
 $string['log_error']             = 'Error';
-$string['log_delete_blocked']    = 'Eliminacion bloqueada';
-$string['log_unzip_blocked']     = 'Descompresion bloqueada';
+$string['log_delete_blocked']    = 'Eliminación bloqueada';
+$string['log_unzip_blocked']     = 'Descompresión bloqueada';
 $string['log_import_registered'] = 'Importado';
 
 // Search.
@@ -78,31 +76,31 @@ $string['search']             = 'Buscar';
 $string['showing_x_of_y']    = 'Mostrando {$a->from}–{$a->to} de {$a->total} paquetes';
 
 // Admin panel UI strings.
-$string['make_public']             = 'Hacer Publico';
+$string['make_public']             = 'Hacer Público';
 $string['make_protected']          = 'Proteger';
-$string['make_public_confirm']     = '¿Hacer PUBLICO este SCORM? Cualquier usuario podra descargarlo.';
-$string['make_protected_confirm']  = '¿Marcar este SCORM como PROTEGIDO? Solo usuarios con permiso podran descargarlo.';
-$string['cleanup_orphans']         = 'Limpiar huerfanos';
+$string['make_public_confirm']     = '¿Hacer PÚBLICO este SCORM? Cualquier usuario podrá descargarlo.';
+$string['make_protected_confirm']  = '¿Marcar este SCORM como PROTEGIDO? Solo usuarios con permiso podrán descargarlo.';
+$string['cleanup_orphans']         = 'Limpiar huérfanos';
 $string['cleanup_orphans_title']   = 'Elimina registros de SCORMs que han sido borrados de Moodle';
 $string['cleanup_orphans_confirm'] = '¿Eliminar registros de SCORMs que ya no existen en Moodle?';
-$string['clear_search']            = 'Limpiar busqueda';
+$string['clear_search']            = 'Limpiar búsqueda';
 $string['clear_filters']           = 'Limpiar';
 $string['changed_to_protected']    = 'SCORM cmid={$a->cmid} ahora es PROTEGIDO.';
-$string['changed_to_public']       = 'SCORM cmid={$a->cmid} ahora es PUBLICO.';
-$string['cleanup_result']          = 'Limpieza: {$a} registro(s) huerfano(s) eliminado(s).';
+$string['changed_to_public']       = 'SCORM cmid={$a->cmid} ahora es PÚBLICO.';
+$string['cleanup_result']          = 'Limpieza: {$a} registro(s) huérfano(s) eliminado(s).';
 $string['cleanup_error']           = 'Error en limpieza: {$a}';
 $string['showing_x_of_y_records']  = 'Mostrando {$a->from}–{$a->to} de {$a->total} registros';
 
 // Privacy metadata.
-$string['privacy:metadata:items']             = 'Registro de paquetes SCORM y su estado de proteccion.';
+$string['privacy:metadata:items']             = 'Registro de paquetes SCORM y su estado de protección.';
 $string['privacy:metadata:items:creatorid']   = 'Usuario creador del SCORM.';
-$string['privacy:metadata:items:cmid']        = 'ID del course module.';
-$string['privacy:metadata:items:isprotected'] = 'Indica si el paquete esta protegido.';
-$string['privacy:metadata:items:timecreated'] = 'Fecha de creacion del registro.';
+$string['privacy:metadata:items:cmid']        = 'ID del módulo de curso.';
+$string['privacy:metadata:items:isprotected'] = 'Indica si el paquete está protegido.';
+$string['privacy:metadata:items:timecreated'] = 'Fecha de creación del registro.';
 
-$string['privacy:metadata:logs']             = 'Registros de auditoria del plugin.';
-$string['privacy:metadata:logs:userid']      = 'Usuario que realizo la accion.';
+$string['privacy:metadata:logs']             = 'Registros de auditoría del plugin.';
+$string['privacy:metadata:logs:userid']      = 'Usuario que realizó la acción.';
 $string['privacy:metadata:logs:eventtype']   = 'Tipo de evento.';
 $string['privacy:metadata:logs:message']     = 'Detalle del evento.';
-$string['privacy:metadata:logs:ipaddress']   = 'Direccion IP.';
+$string['privacy:metadata:logs:ipaddress']   = 'Dirección IP.';
 $string['privacy:metadata:logs:timecreated'] = 'Fecha del evento.';

@@ -43,7 +43,7 @@ Al instalar, `db/install.php` escanea todos los SCORMs existentes y los registra
 
 Cuando un usuario crea una actividad SCORM (`course_module_created`), el plugin la registra en `mdl_local_scorm_incca_items`:
 
-- Si el creador tiene `local/scorm_incca:cargar` → registrado como **protegido**
+- Si el creador tiene `local/scorm_incca:upload` → registrado como **protegido**
 - Si no la tiene → registrado como **público**
 
 Cuando un usuario edita un SCORM existente (`course_module_updated`):
@@ -67,7 +67,7 @@ Cuando se importa contenido entre cursos (`backup/import.php`), Moodle crea los 
 
 ### 3. Protección de descarga
 
-Intercepta las peticiones HTTP antes de que Moodle sirva el archivo. Bloquea si `isprotected = 1` y el usuario no tiene `local/scorm_incca:descargar` en el curso correspondiente.
+Intercepta las peticiones HTTP antes de que Moodle sirva el archivo. Bloquea si `isprotected = 1` y el usuario no tiene `local/scorm_incca:download` en el curso correspondiente.
 
 | Endpoint | Acción interceptada |
 |---|---|
@@ -129,7 +129,7 @@ Accesible desde Administración del sitio > Extensiones > Plugins locales > SCOR
 
 ## Capabilities
 
-### `local/scorm_incca:cargar`
+### `local/scorm_incca:upload`
 
 | Propiedad | Valor |
 |---|---|
@@ -141,7 +141,7 @@ Marca el SCORM como protegido al crearlo. También habilita eliminar SCORMs prot
 
 **Dónde asignar:** contexto del curso (override de rol) o rol a nivel de curso/categoría.
 
-### `local/scorm_incca:descargar`
+### `local/scorm_incca:download`
 
 | Propiedad | Valor |
 |---|---|

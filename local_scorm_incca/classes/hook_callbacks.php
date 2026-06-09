@@ -4,50 +4,62 @@ namespace local_scorm_incca;
 defined('MOODLE_INTERNAL') || die();
 
 /**
- * Hook callbacks para local_scorm_incca.
+ * Access control logic for local_scorm_incca.
  *
  * ─────────────────────────────────────────────────────────────────────────────
- * ARQUITECTURA DE INTERCEPCIÓN (Moodle 4.5)
+ * INTERCEPTION ARCHITECTURE (Moodle 4.5)
  * ─────────────────────────────────────────────────────────────────────────────
  *
- * MECANISMO 1 — after_config (lib.php, callback LEGACY)
- *   • Se dispara en lib/setup.php para TODA petición HTTP.
- *   • Cubre draftfile.php y pluginfile.php antes de que sirvan el archivo.
+ * MECHANISM 1 — after_config hook (db/hooks.php)
+ *   • Fires in lib/setup.php for EVERY HTTP request.
+ *   • Covers draftfile.php and pluginfile.php before they serve the file.
+ *   • The hook dispatcher wraps every callback in try/catch, so exceptions
+ *     are caught silently — safe even when NO_DEBUG_DISPLAY=true.
  *
- * MECANISMO 2 — after_require_login (lib.php, callback LEGACY)
- *   • Se dispara dentro de require_login() como respaldo.
- *   • Actúa si after_config no pudo actuar (usuario no autenticado aún).
+ * MECHANISM 2 — after_require_login (lib.php, LEGACY callback)
+ *   • Fires inside require_login() as a fallback.
+ *   • Acts if the hook fired before the user was authenticated.
  *
- * GUARD DE EJECUCIÓN ÚNICA
- *   Ambos mecanismos llaman a check_access(). Para evitar doble consulta BD,
- *   check_access() usa REQUEST_TIME_FLOAT como clave de guard por-petición.
+ * SINGLE-EXECUTION GUARD
+ *   Both mechanisms call check_access(). To avoid double DB queries,
+ *   check_access() uses REQUEST_TIME_FLOAT as a per-request guard key.
  *
- * BYPASS DE SITE ADMIN
- *   Los site admins siempre pueden descargar.
+ * SITE ADMIN BYPASS
+ *   Site admins can always download.
  */
 class hook_callbacks {
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // MECANISMO 1: after_config — dispara para TODA petición HTTP
+    // HOOK ENTRY POINT: after_config
     // ═══════════════════════════════════════════════════════════════════════════
 
     /**
-     * Dispara cuando config.php termina de cargarse (toda petición HTTP).
+     * Hook callback: fires when config.php finishes loading (every HTTP request).
+     *
+     * Registered in db/hooks.php for \core\hook\after_config.
      *
      * @param \core\hook\after_config $hook
      */
     public static function after_config(\core\hook\after_config $hook): void {
         global $USER;
 
-        $isPluginfile     = helper::is_pluginfile_request();
-        $isDraftfile      = helper::is_draftfile_request();
-        $isDraftfilesAjax = helper::is_draftfiles_ajax_request();
+        $script = $_SERVER['SCRIPT_NAME'] ?? '';
+        $isDraft   = strpos($script, '/draftfile.php')       !== false;
+        $isPlugin  = strpos($script, '/pluginfile.php')      !== false;
+        $isAjax    = strpos($script, '/draftfiles_ajax.php') !== false;
+        $isService = strpos($script, '/lib/ajax/service.php') !== false;
+        $isBackup  = strpos($script, '/backup/backup.php')   !== false;
 
-        if (!$isPluginfile && !$isDraftfile && !$isDraftfilesAjax) {
+        if (!$isDraft && !$isPlugin && !$isAjax && !$isService && !$isBackup) {
             return;
         }
 
-        if (empty($USER->id) || isguestuser($USER)) {
+        if (empty($USER) || empty($USER->id) || isguestuser($USER)) {
+            return;
+        }
+
+        if ($isBackup) {
+            self::handle_backup($USER);
             return;
         }
 
@@ -55,22 +67,22 @@ class hook_callbacks {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // LÓGICA CENTRAL: check_access()
+    // CENTRAL LOGIC: check_access()
     // ═══════════════════════════════════════════════════════════════════════════
 
     /**
-     * Lógica central de control de acceso.
-     * Llamado desde after_config y desde after_require_login (lib.php).
+     * Central access control logic.
+     * Called from after_config hook and from after_require_login (lib.php).
      *
-     * Incluye guard de ejecución única para evitar doble consulta BD cuando
-     * ambos mecanismos disparan en la misma petición.
+     * Includes a single-execution guard to avoid double DB queries when
+     * both mechanisms fire in the same request.
      */
     public static function check_access(): void {
         global $USER;
 
-        // ── Guard: evitar ejecución doble en la misma petición ──────────────
-        // Usa REQUEST_TIME_FLOAT para que el guard sea por-petición aunque el
-        // proceso PHP persista entre requests (PHP-FPM, OPcache, etc.).
+        // ── Guard: prevent double execution within the same request ──────────
+        // Uses REQUEST_TIME_FLOAT so the guard is per-request even if the PHP
+        // process persists between requests (PHP-FPM, OPcache, etc.).
         static $checkedRequestTime = null;
         $currentRequestTime = $_SERVER['REQUEST_TIME_FLOAT'] ?? microtime(true);
         if ($checkedRequestTime === $currentRequestTime) {
@@ -78,7 +90,7 @@ class hook_callbacks {
         }
         $checkedRequestTime = $currentRequestTime;
 
-        // ── Identificar endpoint ─────────────────────────────────────────────
+        // ── Identify endpoint ────────────────────────────────────────────────
         $isPluginfile     = helper::is_pluginfile_request();
         $isDraftfile      = helper::is_draftfile_request();
         $isDraftfilesAjax = helper::is_draftfiles_ajax_request();
@@ -88,17 +100,17 @@ class hook_callbacks {
             return;
         }
 
-        // ── Flujo lib/ajax/service.php — eliminación de módulos SCORM ────────
-        // El nuevo editor de cursos (Moodle 4.x) borra módulos via AJAX a este
-        // endpoint con core_courseformat_update_course (action=cm_delete) o
-        // core_course_edit_module (action=delete). Ambas usan $async=true, por lo
-        // que pre_course_module_delete NO dispara en el contexto web.
+        // ── Flow: lib/ajax/service.php — SCORM module deletion ───────────────
+        // The new course editor (Moodle 4.x) deletes modules via AJAX to this
+        // endpoint using core_courseformat_update_course (action=cm_delete) or
+        // core_course_edit_module (action=delete). Both use $async=true, so
+        // pre_course_module_delete does NOT fire in the web context.
         if ($isService) {
             self::handle_ajax_service_delete($USER);
             return;
         }
 
-        // ── Flujo draftfiles_ajax.php ────────────────────────────────────────
+        // ── Flow: draftfiles_ajax.php ────────────────────────────────────────
         if ($isDraftfilesAjax) {
             $action = $_REQUEST['action'] ?? '';
             if ($action === 'unzip') {
@@ -117,7 +129,7 @@ class hook_callbacks {
             return;
         }
 
-        // ── Flujo pluginfile.php / draftfile.php ─────────────────────────────
+        // ── Flow: pluginfile.php / draftfile.php ─────────────────────────────
         $info = helper::parse_pluginfile_path();
 
         if (!$info) {
@@ -169,46 +181,46 @@ class hook_callbacks {
             }
         }
 
-        // ── Bypass: site admins siempre pueden descargar ─────────────────────
+        // ── Bypass: site admins can always download ──────────────────────────
         if (is_siteadmin($USER->id)) {
             return;
         }
 
-        // ── Evaluar capability ───────────────────────────────────────────────
-        $hasCap = has_capability('local/scorm_incca:descargar', $context, $USER);
+        // ── Evaluate capability ──────────────────────────────────────────────
+        $hasCap = has_capability('local/scorm_incca:download', $context, $USER);
 
         if ($hasCap) {
             helper::log(helper::LOG_DOWNLOAD_ALLOWED, (int)$USER->id, $cmid,
-                "Descarga permitida | userid={$USER->id} cmid={$cmid}");
+                "Download allowed | userid={$USER->id} cmid={$cmid}");
             return;
         }
 
-        // ── BLOQUEAR ─────────────────────────────────────────────────────────
+        // ── BLOCK ────────────────────────────────────────────────────────────
         helper::log(helper::LOG_DOWNLOAD_BLOCKED, (int)$USER->id, $cmid,
-            "Descarga BLOQUEADA | userid={$USER->id} cmid={$cmid}");
+            "Download BLOCKED | userid={$USER->id} cmid={$cmid}");
 
-        // die() es irrecuperable — no puede ser capturado por try/catch de Moodle.
+        // die() is irrecoverable — cannot be caught by Moodle's try/catch.
         if (!headers_sent()) {
             header('HTTP/1.1 403 Forbidden');
             header('Content-Type: text/html; charset=UTF-8');
         }
-        echo '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">';
-        echo '<title>403 - Acceso Denegado</title>';
+        echo '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">';
+        echo '<title>403 - Access Denied</title>';
         echo '<style>body{font-family:sans-serif;max-width:600px;margin:60px auto;padding:20px;text-align:center}';
         echo 'h1{color:#c0392b}p{color:#555}a{color:#2980b9}</style></head><body>';
-        echo '<h1>&#x1F512; Acceso Denegado</h1>';
-        echo '<p>No tiene permisos para descargar este paquete SCORM protegido.</p>';
-        echo '<p><a href="javascript:history.back()">&#8592; Volver</a></p>';
+        echo '<h1>&#x1F512; Access Denied</h1>';
+        echo '<p>' . get_string('downloaddenied', 'local_scorm_incca') . '</p>';
+        echo '<p><a href="javascript:history.back()">&#8592; Back</a></p>';
         echo '</body></html>';
         die();
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // ZIP: draftfiles_ajax.php — "Descargar todos"
+    // ZIP: draftfiles_ajax.php — "Download all"
     // ═══════════════════════════════════════════════════════════════════════════
 
     /**
-     * Intercepta la generación del ZIP masivo y filtra los SCORM protegidos.
+     * Intercepts bulk ZIP generation and filters out protected SCORMs.
      */
     private static function handle_draftfiles_ajax_download($USER): void {
         $action = $_REQUEST['action'] ?? '';
@@ -233,7 +245,7 @@ class hook_callbacks {
             $selected = self::enumerate_draft_files($USER->id, $draftid, $filepath);
         }
 
-        // Site admins: bypass completo.
+        // Site admins: full bypass.
         if (is_siteadmin($USER->id)) {
             return;
         }
@@ -249,10 +261,10 @@ class hook_callbacks {
                 $cmid = helper::find_protected_scorm_by_draft($draftid, $filename);
                 if ($cmid) {
                     $modctx = \context_module::instance($cmid, IGNORE_MISSING);
-                    if ($modctx && !has_capability('local/scorm_incca:descargar', $modctx, $USER)) {
+                    if ($modctx && !has_capability('local/scorm_incca:download', $modctx, $USER)) {
                         $blockedcmids[] = $cmid;
                         helper::log(helper::LOG_DOWNLOAD_BLOCKED, (int)$USER->id, $cmid,
-                            "ZIP masivo bloqueado | userid={$USER->id} cmid={$cmid} file={$filename}");
+                            "Bulk download blocked | userid={$USER->id} cmid={$cmid} file={$filename}");
                         continue;
                     }
                 }
@@ -264,7 +276,7 @@ class hook_callbacks {
             if (!headers_sent()) {
                 header('Content-Type: application/json');
             }
-            echo json_encode(['error' => 'Acceso denegado. No tiene permisos para descargar este paquete SCORM protegido.']);
+            echo json_encode(['error' => get_string('downloaddenied', 'local_scorm_incca')]);
             die();
         }
 
@@ -275,21 +287,21 @@ class hook_callbacks {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // SERVICE: lib/ajax/service.php — eliminación de módulos SCORM protegidos
+    // SERVICE: lib/ajax/service.php — deletion of protected SCORM modules
     // ═══════════════════════════════════════════════════════════════════════════
 
     /**
-     * Intercepta peticiones de eliminación de módulos via lib/ajax/service.php.
+     * Intercepts module deletion requests via lib/ajax/service.php.
      *
-     * Detecta dos métodos de webservice que eliminan módulos en Moodle 4.x:
-     *  1. core_courseformat_update_course  (action=cm_delete)  — nuevo editor de cursos
+     * Detects two web service methods that delete modules in Moodle 4.x:
+     *  1. core_courseformat_update_course  (action=cm_delete)  — new course editor
      *  2. core_course_edit_module          (action=delete)     — legacy
      *
-     * En PHP 8+ (requerido por Moodle 4.5), php://input es re-legible: leerlo
-     * aquí en after_config NO impide que service.php lo lea después.
+     * In PHP 8+ (required by Moodle 4.5), php://input is re-readable: reading it
+     * here in after_config does NOT prevent service.php from reading it afterwards.
      */
     private static function handle_ajax_service_delete($USER): void {
-        // Solo aplica a peticiones POST (las lecturas usan GET en service.php).
+        // Only applies to POST requests (reads use GET in service.php).
         if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
             return;
         }
@@ -315,7 +327,7 @@ class hook_callbacks {
 
             $blockedcmid = null;
 
-            // ── core_courseformat_update_course — nuevo editor Moodle 4.x ────
+            // ── core_courseformat_update_course — new Moodle 4.x editor ──────
             if ($methodname === 'core_courseformat_update_course'
                 && ($args['action'] ?? '') === 'cm_delete') {
                 $ids = (array)($args['ids'] ?? []);
@@ -327,7 +339,7 @@ class hook_callbacks {
                 }
             }
 
-            // ── core_course_edit_module — path legacy ─────────────────────────
+            // ── core_course_edit_module — legacy path ─────────────────────────
             if ($methodname === 'core_course_edit_module'
                 && ($args['action'] ?? '') === 'delete') {
                 $id = (int)($args['id'] ?? 0);
@@ -341,21 +353,21 @@ class hook_callbacks {
                     helper::LOG_DELETE_BLOCKED,
                     (int)$USER->id,
                     $blockedcmid,
-                    "Eliminacion BLOQUEADA via AJAX service | userid={$USER->id} cmid={$blockedcmid}"
+                    "Deletion BLOCKED via AJAX service | userid={$USER->id} cmid={$blockedcmid}"
                 );
 
                 if (!headers_sent()) {
                     header('Content-Type: application/json');
                 }
 
-                // Formato de error que espera lib/ajax/service.php JS handler.
+                // Error format expected by the lib/ajax/service.php JS handler.
                 echo json_encode([
                     $index => [
                         'error'     => true,
                         'exception' => [
                             'errorcode' => 'deletedenied',
                             'module'    => 'local_scorm_incca',
-                            'message'   => 'No tiene permiso para eliminar este paquete SCORM protegido. Solo administradores o usuarios con permisos de carga/descarga pueden eliminarlo.',
+                            'message'   => get_string('deletedenied', 'local_scorm_incca'),
                         ],
                     ],
                 ]);
@@ -365,163 +377,162 @@ class hook_callbacks {
     }
 
     /**
-     * Comprueba si el usuario actual NO tiene permiso para eliminar un cmid.
-     * Retorna true si se debe BLOQUEAR, false si se permite.
+     * Checks whether the current user does NOT have permission to delete a cmid.
+     * Returns true if the action should be BLOCKED, false if allowed.
      */
     private static function is_delete_blocked(int $cmid, $USER): bool {
         if (!$cmid) {
             return false;
         }
-        // Solo aplica a SCORMs protegidos en nuestra tabla.
+        // Only applies to protected SCORMs in our table.
         if (!helper::is_protected($cmid)) {
             return false;
         }
-        // Site admins pueden eliminar siempre.
+        // Site admins can always delete.
         if (is_siteadmin($USER->id)) {
             return false;
         }
-        // Con capability cargar o descargar → permitido.
+        // With cargar or descargar capability → allowed.
         $context = \context_module::instance($cmid, IGNORE_MISSING);
         if ($context) {
-            if (has_capability('local/scorm_incca:cargar',    $context, $USER->id, false) ||
-                has_capability('local/scorm_incca:descargar', $context, $USER->id, false)) {
+            if (has_capability('local/scorm_incca:upload',    $context, $USER->id, false) ||
+                has_capability('local/scorm_incca:download', $context, $USER->id, false)) {
                 return false;
             }
         }
-        return true; // Bloquear.
+        return true; // Block.
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // UNZIP: draftfiles_ajax.php — "Descomprimir"
+    // UNZIP: draftfiles_ajax.php — "Extract"
     // ═══════════════════════════════════════════════════════════════════════════
 
     /**
-     * Intercepta la acción de descompresión en el file-manager.
+     * Intercepts the unzip action in the file manager.
      * POST /repository/draftfiles_ajax.php?action=unzip
      *
-     * Si el ZIP es un SCORM protegido y el usuario no tiene descargar → rechaza con JSON.
-     * El client JS (filemanager.js línea ~1040) muestra el mensaje de error al usuario.
+     * If the ZIP is a protected SCORM and the user lacks descargar → rejects with JSON.
+     * The JS client (filemanager.js ~line 1040) shows the error message to the user.
      */
     private static function handle_draftfiles_ajax_unzip($USER): void {
         $itemid   = (int)($_POST['itemid'] ?? 0);
         $filename = trim($_POST['filename'] ?? '');
 
         if (!$itemid || $filename === '') {
-            return; // Sin datos suficientes: fail-open.
+            return; // Insufficient data: fail-open.
         }
 
-        // Verificar si el draft ZIP corresponde a un SCORM protegido.
+        // Check whether the draft ZIP corresponds to a protected SCORM.
         $cmid = helper::find_protected_scorm_by_draft($itemid, $filename);
         if (!$cmid) {
-            return; // No es SCORM protegido: permitir.
+            return; // Not a protected SCORM: allow.
         }
 
-        // Site admins siempre pueden descomprimir.
+        // Site admins can always unzip.
         if (is_siteadmin($USER->id)) {
             return;
         }
 
-        // Verificar capability local/scorm_incca:descargar.
+        // Check local/scorm_incca:download capability.
         $context = \context_module::instance($cmid, IGNORE_MISSING);
-        if ($context && has_capability('local/scorm_incca:descargar', $context, $USER)) {
+        if ($context && has_capability('local/scorm_incca:download', $context, $USER)) {
             helper::log(helper::LOG_DOWNLOAD_ALLOWED, (int)$USER->id, $cmid,
-                "Descompresion permitida | userid={$USER->id} cmid={$cmid} file={$filename}");
+                "Unzip allowed | userid={$USER->id} cmid={$cmid} file={$filename}");
             return;
         }
 
-        // BLOQUEAR: responder con JSON error (el client JS espera JSON de draftfiles_ajax.php).
+        // BLOCK: respond with JSON error (JS client expects JSON from draftfiles_ajax.php).
         helper::log(helper::LOG_UNZIP_BLOCKED, (int)$USER->id, $cmid,
-            "Descompresion BLOQUEADA | userid={$USER->id} cmid={$cmid} file={$filename}");
+            "Unzip BLOCKED | userid={$USER->id} cmid={$cmid} file={$filename}");
 
         if (!headers_sent()) {
             header('Content-Type: application/json');
         }
-        echo json_encode(['error' => 'No tiene permisos para descomprimir este paquete SCORM protegido.']);
+        echo json_encode(['error' => get_string('unzipdenied', 'local_scorm_incca')]);
         die();
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // DELETE FILE: draftfiles_ajax.php — "Eliminar archivo" en Edit Settings
+    // DELETE FILE: draftfiles_ajax.php — "Delete file" in Edit Settings
     // ═══════════════════════════════════════════════════════════════════════════
 
     /**
-     * Intercepta la eliminación del archivo ZIP dentro del file-manager de
-     * "Editar ajustes" del SCORM.
+     * Intercepts ZIP file deletion inside the file manager in SCORM "Edit settings".
      *
      * POST /repository/draftfiles_ajax.php?action=delete
-     * Parámetros relevantes: itemid (draft area ID), filename (nombre del ZIP).
+     * Relevant parameters: itemid (draft area ID), filename (ZIP name).
      *
-     * Si el ZIP corresponde a un SCORM protegido y el usuario no tiene
-     * cargar NI descargar → responde JSON error y termina.
+     * If the ZIP corresponds to a protected SCORM and the user lacks both
+     * cargar and descargar → responds with JSON error and terminates.
      */
     private static function handle_draftfiles_ajax_delete_file($USER): void {
         $itemid   = (int)($_POST['itemid'] ?? 0);
         $filename = trim($_POST['filename'] ?? '');
 
         if (!$itemid || $filename === '') {
-            return; // Sin datos suficientes: fail-open.
+            return; // Insufficient data: fail-open.
         }
 
-        // Solo aplica a archivos ZIP (paquetes SCORM).
+        // Only applies to ZIP files (SCORM packages).
         $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
         if ($ext !== 'zip') {
             return;
         }
 
-        // Verificar si el draft ZIP corresponde a un SCORM protegido.
+        // Check whether the draft ZIP corresponds to a protected SCORM.
         $cmid = helper::find_protected_scorm_by_draft($itemid, $filename);
         if (!$cmid) {
-            return; // No es SCORM protegido: permitir.
+            return; // Not a protected SCORM: allow.
         }
 
-        // Site admins siempre pueden eliminar.
+        // Site admins can always delete.
         if (is_siteadmin($USER->id)) {
             return;
         }
 
-        // Con capability cargar O descargar → permitido.
+        // With cargar OR descargar capability → allowed.
         $context = \context_module::instance($cmid, IGNORE_MISSING);
         if ($context) {
-            if (has_capability('local/scorm_incca:cargar',    $context, $USER->id, false) ||
-                has_capability('local/scorm_incca:descargar', $context, $USER->id, false)) {
+            if (has_capability('local/scorm_incca:upload',    $context, $USER->id, false) ||
+                has_capability('local/scorm_incca:download', $context, $USER->id, false)) {
                 return;
             }
         }
 
-        // BLOQUEAR: registrar y responder JSON error.
+        // BLOCK: log and respond with JSON error.
         helper::log(
             helper::LOG_DELETE_BLOCKED,
             (int)$USER->id,
             $cmid,
-            "Eliminacion archivo bloqueada (Edit Settings) | userid={$USER->id} cmid={$cmid} file={$filename}"
+            "File deletion blocked (Edit Settings) | userid={$USER->id} cmid={$cmid} file={$filename}"
         );
 
         if (!headers_sent()) {
             header('Content-Type: application/json');
         }
-        echo json_encode(['error' => 'No tiene permisos para eliminar el archivo de este paquete SCORM protegido.']);
+        echo json_encode(['error' => get_string('deletedenied', 'local_scorm_incca')]);
         die();
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // DELETE SELECTED: draftfiles_ajax.php — toolbar "Delete" en modo lista
+    // DELETE SELECTED: draftfiles_ajax.php — toolbar "Delete" in list mode
     // ═══════════════════════════════════════════════════════════════════════════
 
     /**
-     * Intercepta la eliminacion masiva desde el toolbar del file manager (modo lista).
+     * Intercepts bulk deletion from the file manager toolbar (list mode).
      * POST /repository/draftfiles_ajax.php?action=deleteselected
      *
-     * Parametros: itemid (draft area ID), selected (JSON: [{filepath, filename}, ...])
+     * Parameters: itemid (draft area ID), selected (JSON: [{filepath, filename}, ...])
      *
-     * Si alguno de los archivos seleccionados es un SCORM protegido sin permiso,
-     * bloquea toda la operacion respondiendo con JSON error.
+     * If any selected file is a protected SCORM without permission,
+     * blocks the entire operation by responding with a JSON error.
      */
     private static function handle_draftfiles_ajax_delete_selected($USER): void {
         $itemid      = (int)($_POST['itemid'] ?? 0);
         $selectedraw = trim($_POST['selected'] ?? '');
 
         if (!$itemid || $selectedraw === '') {
-            return; // Sin datos suficientes: fail-open.
+            return; // Insufficient data: fail-open.
         }
 
         $selectedfiles = @json_decode($selectedraw);
@@ -529,7 +540,7 @@ class hook_callbacks {
             return;
         }
 
-        // Site admins: bypass completo.
+        // Site admins: full bypass.
         if (is_siteadmin($USER->id)) {
             return;
         }
@@ -537,44 +548,44 @@ class hook_callbacks {
         foreach ($selectedfiles as $fileinfo) {
             $filename = trim($fileinfo->filename ?? '');
             if ($filename === '' || $filename === '.') {
-                continue; // Directorios: ignorar.
+                continue; // Directories: skip.
             }
 
             $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
             if ($ext !== 'zip') {
-                continue; // Solo aplica a ZIPs (paquetes SCORM).
+                continue; // Only applies to ZIPs (SCORM packages).
             }
 
             $cmid = helper::find_protected_scorm_by_draft($itemid, $filename);
             if (!$cmid) {
-                continue; // No es SCORM protegido: permitir.
+                continue; // Not a protected SCORM: allow.
             }
 
             $context = \context_module::instance($cmid, IGNORE_MISSING);
             if ($context &&
-                (has_capability('local/scorm_incca:cargar',    $context, $USER->id, false) ||
-                 has_capability('local/scorm_incca:descargar', $context, $USER->id, false))) {
-                continue; // Tiene permiso: permitir.
+                (has_capability('local/scorm_incca:upload',    $context, $USER->id, false) ||
+                 has_capability('local/scorm_incca:download', $context, $USER->id, false))) {
+                continue; // Has permission: allow.
             }
 
-            // BLOQUEAR al encontrar el primer archivo protegido sin permiso.
+            // BLOCK on first protected file without permission.
             helper::log(
                 helper::LOG_DELETE_BLOCKED,
                 (int)$USER->id,
                 $cmid,
-                "Eliminacion masiva BLOQUEADA (deleteselected) | userid={$USER->id} cmid={$cmid} file={$filename}"
+                "Bulk deletion BLOCKED (deleteselected) | userid={$USER->id} cmid={$cmid} file={$filename}"
             );
 
             if (!headers_sent()) {
                 header('Content-Type: application/json');
             }
-            echo json_encode(['error' => 'No tiene permisos para eliminar el archivo de este paquete SCORM protegido.']);
+            echo json_encode(['error' => get_string('deletedenied', 'local_scorm_incca')]);
             die();
         }
     }
 
     /**
-     * Enumera todos los archivos de un área de borrador.
+     * Enumerates all files in a draft file area.
      */
     private static function enumerate_draft_files(int $userid, int $draftid, string $filepath): array {
         $userctx     = \context_user::instance($userid);
@@ -597,20 +608,20 @@ class hook_callbacks {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // BACKUP: backup/backup.php — bloquear descarga de SCORMs protegidos vía .mbz
+    // BACKUP: backup/backup.php — block download of protected SCORMs via .mbz
     // ═══════════════════════════════════════════════════════════════════════════
 
     /**
      * Intercepts backup/backup.php for both course and activity backup.
      *
-     * Flujo:
-     *  - Si cm está en GET y es un SCORM protegido → verificar permiso backup.
-     *  - Si no hay cm → verificar si el curso tiene SCORMs protegidos → verificar permiso.
-     *  - Quien tenga backup|cargar|descargar en el curso → permitir.
-     *  - Siteadmin → siempre permitir.
+     * Flow:
+     *  - If cm is in GET and is a protected SCORM → check backup permission.
+     *  - If no cm → check whether the course has protected SCORMs → check permission.
+     *  - Users with backup|cargar|descargar on the course → allow.
+     *  - Siteadmin → always allow.
      */
     public static function handle_backup(\stdClass $USER): void {
-        // Siteadmin siempre puede.
+        // Site admins always allowed.
         if (is_siteadmin($USER->id)) {
             debugger::logDiag('BACKUP_ALLOW', [
                 'reason'   => 'siteadmin',
@@ -630,7 +641,7 @@ class hook_callbacks {
         }
 
         if ($cmid > 0) {
-            // ── Backup de actividad específica ────────────────────────────
+            // ── Single activity backup ────────────────────────────────────────
             $isProtected = helper::is_protected($cmid);
 
             debugger::logDiag('BACKUP_ACTIVITY_CHECK', [
@@ -641,7 +652,7 @@ class hook_callbacks {
             ]);
 
             if (!$isProtected) {
-                return; // No es SCORM protegido — sin restricción.
+                return; // Not a protected SCORM — no restriction.
             }
 
             $ctx = \context_module::instance($cmid, IGNORE_MISSING);
@@ -659,13 +670,13 @@ class hook_callbacks {
 
             if (!$canBackup) {
                 helper::log(helper::LOG_DOWNLOAD_BLOCKED, (int)$USER->id, $cmid,
-                    "Backup actividad BLOQUEADO | cmid={$cmid} userid={$USER->id}");
+                    "Activity backup BLOCKED | cmid={$cmid} userid={$USER->id}");
                 self::deny_backup_response(true);
             }
             return;
         }
 
-        // ── Backup de curso completo ───────────────────────────────────────
+        // ── Full course backup ────────────────────────────────────────────────
         $protectedCmids = helper::get_protected_cmids_in_course($courseid);
 
         debugger::logDiag('BACKUP_COURSE_CHECK', [
@@ -676,7 +687,7 @@ class hook_callbacks {
         ]);
 
         if (empty($protectedCmids)) {
-            return; // Sin SCORMs protegidos — backup normal sin restricción.
+            return; // No protected SCORMs — normal backup without restriction.
         }
 
         $coursecontext = \context_course::instance($courseid, IGNORE_MISSING);
@@ -694,45 +705,43 @@ class hook_callbacks {
 
         if (!$canBackup) {
             helper::log(helper::LOG_DOWNLOAD_BLOCKED, (int)$USER->id, 0,
-                "Backup curso BLOQUEADO | courseid={$courseid} userid={$USER->id} protected=" . count($protectedCmids));
+                "Course backup BLOCKED | courseid={$courseid} userid={$USER->id} protected=" . count($protectedCmids));
             self::deny_backup_response(false);
         }
     }
 
     /**
-     * Verifica si el usuario puede hacer backup de un curso con SCORMs protegidos.
-     * Acepta cualquiera de las tres capabilities del plugin a nivel de curso.
+     * Checks whether the user can back up a course containing protected SCORMs.
+     * Accepts any of the three plugin capabilities at the course level.
      */
     private static function user_can_backup_protected(\stdClass $USER, \context $ctx): bool {
         return has_capability('local/scorm_incca:backup',    $ctx, $USER)
-            || has_capability('local/scorm_incca:cargar',    $ctx, $USER)
-            || has_capability('local/scorm_incca:descargar', $ctx, $USER);
+            || has_capability('local/scorm_incca:upload',    $ctx, $USER)
+            || has_capability('local/scorm_incca:download', $ctx, $USER);
     }
 
     /**
-     * Muestra página 403 y detiene la ejecución (mismo patrón que check_access).
+     * Renders a 403 page and stops execution (same pattern as check_access).
      *
-     * @param bool $isActivity true = backup de actividad, false = backup de curso.
+     * @param bool $isActivity true = activity backup, false = course backup.
      */
     private static function deny_backup_response(bool $isActivity): void {
         $msg = $isActivity
-            ? 'No tiene permisos para crear copias de seguridad de paquetes SCORM protegidos.'
-            : 'Este curso contiene paquetes SCORM protegidos. Se requiere el permiso de backup para crear copias de seguridad de este curso.';
+            ? get_string('backup_denied_activity', 'local_scorm_incca')
+            : get_string('backup_denied_course',   'local_scorm_incca');
         if (!headers_sent()) {
             header('HTTP/1.1 403 Forbidden');
             header('Content-Type: text/html; charset=UTF-8');
         }
-        echo '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">';
-        echo '<title>403 - Acceso Denegado</title>';
+        echo '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">';
+        echo '<title>403 - Backup Not Allowed</title>';
         echo '<style>body{font-family:sans-serif;max-width:600px;margin:60px auto;padding:20px;text-align:center}';
-        echo 'h1{color:#c0392b}p{color:#555}a{color:#2980b9}</style></head><body>';
-        echo '<h1>&#x1F512; Copia de seguridad no permitida</h1>';
+        echo 'h1{color:#c0392b}p{color:#555}a{color:#2980b9}code{background:#f4f4f4;padding:2px 4px}</style></head><body>';
+        echo '<h1>&#x1F512; Backup Not Allowed</h1>';
         echo "<p>{$msg}</p>";
-        echo '<p><small>Contacte al administrador para que le asigne el permiso <code>local/scorm_incca:backup</code> en este curso.</small></p>';
-        echo '<p><a href="javascript:history.back()">&#8592; Volver</a></p>';
+        echo '<p><small>Contact the administrator to assign the <code>local/scorm_incca:backup</code> capability in this course.</small></p>';
+        echo '<p><a href="javascript:history.back()">&#8592; Back</a></p>';
         echo '</body></html>';
         die();
     }
-
-
 }

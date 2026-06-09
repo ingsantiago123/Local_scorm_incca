@@ -21,7 +21,7 @@ $observers = [
         'priority'  => 1000,
     ],
 
-    // Registra SCORMs que llegaron por import/restore (course_module_created no se dispara en restore).
+    // Registers SCORMs arriving via import/restore (course_module_created does not fire during restore).
     [
         'eventname' => '\core\event\course_restored',
         'callback'  => '\local_scorm_incca\observer::course_restored',

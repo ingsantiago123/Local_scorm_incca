@@ -11,7 +11,7 @@ use core_privacy\local\request\approved_userlist;
 use core_privacy\local\request\userlist;
 
 /**
- * Privacy provider para local_scorm_incca.
+ * Privacy provider for local_scorm_incca.
  */
 class provider implements
     \core_privacy\local\metadata\provider,
@@ -66,7 +66,7 @@ class provider implements
     }
 
     public static function export_user_data(approved_contextlist $contextlist): void {
-        // Implementacion minima - los datos no son sensibles, solo registran autoria.
+        // Minimal implementation — the data is not sensitive, it only records authorship.
     }
 
     public static function delete_data_for_all_users_in_context(\context $context): void {
