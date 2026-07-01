@@ -2,24 +2,24 @@
 defined('MOODLE_INTERNAL') || die();
 
 /**
- * Se ejecuta automáticamente cuando Moodle instala el plugin por primera vez.
+ * Executed automatically when Moodle installs the plugin for the first time.
  *
- * Escanea los SCORMs existentes en la plataforma y los registra:
- *  - Si el creador tiene local/scorm_incca:cargar → protegido (isprotected=1)
- *  - Si no la tiene o no se identifica creador → público (isprotected=0)
+ * Scans existing SCORMs on the platform and registers them:
+ *  - If the creator has local/scorm_incca:upload → protected (isprotected=1)
+ *  - If they don't have it or no creator is identified → public (isprotected=0)
  *
- * Solo registra SCORMs que existan ACTUALMENTE en mdl_course_modules.
- * SCORMs eliminados de Moodle no aparecen porque el JOIN con course_modules
- * filtra solo los que tienen course module activo.
+ * Only registers SCORMs that CURRENTLY exist in mdl_course_modules.
+ * Deleted SCORMs are excluded because the JOIN with course_modules
+ * filters only those with an active course module.
  *
  * @return bool
  */
 function xmldb_local_scorm_incca_install(): bool {
     global $DB;
 
-    // Obtener solo los SCORMs que tienen un course_module activo en este momento.
-    // El JOIN garantiza que no se registren SCORMs huérfanos (eliminados de Moodle
-    // pero cuyos registros en mdl_scorm pudieran haber quedado por alguna razón).
+    // Retrieve only SCORMs that have an active course_module right now.
+    // The JOIN ensures orphaned SCORMs (removed from Moodle but whose
+    // mdl_scorm records might remain for any reason) are not registered.
     $scorms = $DB->get_records_sql("
         SELECT s.id AS scormid,
                s.name,
@@ -39,15 +39,15 @@ function xmldb_local_scorm_incca_install(): bool {
     $now = time();
 
     foreach ($scorms as $scorm) {
-        // Defensive: evitar duplicados si install() se llama más de una vez.
-        // Esto no debería ocurrir en una instalación normal, pero protege contra
-        // fallos parciales de una instalación anterior.
+        // Guard against duplicates if install() is called more than once.
+        // This should not happen in a normal install, but protects against
+        // partial failures of a previous installation attempt.
         if ($DB->record_exists('local_scorm_incca_items', ['cmid' => $scorm->cmid])) {
             continue;
         }
 
-        // Intentar identificar al creador via logs estándar de Moodle.
-        // Si los logs están desactivados o la entrada no existe, creatorid = 0.
+        // Attempt to identify the creator via Moodle's standard log store.
+        // If logging is disabled or the entry does not exist, creatorid = 0.
         $creatorid = (int)$DB->get_field_sql("
             SELECT userid
               FROM {logstore_standard_log}
@@ -63,9 +63,9 @@ function xmldb_local_scorm_incca_install(): bool {
         if ($creatorid) {
             $context = context_module::instance($scorm->cmid, IGNORE_MISSING);
             if ($context) {
-                // Verificar si el creador original tenía permiso de carga al momento
-                // de instalar. Usa has_capability() que respeta herencia de roles.
-                $isprotected = has_capability('local/scorm_incca:cargar', $context, $creatorid);
+                // Check whether the original creator had the upload capability at
+                // install time. Uses has_capability() which respects role inheritance.
+                $isprotected = has_capability('local/scorm_incca:upload', $context, $creatorid);
             }
         }
 

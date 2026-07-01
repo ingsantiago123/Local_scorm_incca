@@ -3,8 +3,8 @@ defined('MOODLE_INTERNAL') || die();
 
 $capabilities = [
 
-    // Permite subir un SCORM y que quede marcado como protegido.
-    'local/scorm_incca:cargar' => [
+    // Allows uploading a SCORM package and marking it as protected.
+    'local/scorm_incca:upload' => [
         'captype'      => 'write',
         'contextlevel' => CONTEXT_COURSE,
         'archetypes'   => [
@@ -12,8 +12,8 @@ $capabilities = [
         ],
     ],
 
-    // Permite descargar el .zip de un SCORM protegido.
-    'local/scorm_incca:descargar' => [
+    // Allows downloading the .zip file of a protected SCORM package.
+    'local/scorm_incca:download' => [
         'captype'      => 'read',
         'contextlevel' => CONTEXT_COURSE,
         'archetypes'   => [
@@ -21,7 +21,7 @@ $capabilities = [
         ],
     ],
 
-    // Permite crear copias de seguridad de cursos con SCORMs protegidos.
+    // Allows creating backups of courses containing protected SCORM packages.
     'local/scorm_incca:backup' => [
         'captype'      => 'read',
         'contextlevel' => CONTEXT_COURSE,
@@ -30,7 +30,7 @@ $capabilities = [
         ],
     ],
 
-    // Acceso al panel de administracion del plugin.
+    // Access to the plugin admin panel.
     'local/scorm_incca:viewadminpanel' => [
         'captype'      => 'read',
         'contextlevel' => CONTEXT_SYSTEM,

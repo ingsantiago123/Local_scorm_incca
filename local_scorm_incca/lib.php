@@ -2,91 +2,27 @@
 defined('MOODLE_INTERNAL') || die();
 
 /**
- * lib.php — Callbacks legacy de local_scorm_incca.
+ * lib.php — Legacy callbacks for local_scorm_incca.
  *
- * ─────────────────────────────────────────────────────────────────────────────
- * POR QUÉ SE USA EL MECANISMO LEGACY (Y NO db/hooks.php PARA after_config)
- * ─────────────────────────────────────────────────────────────────────────────
+ * after_config has been migrated to the hook system (db/hooks.php).
+ * This file retains two callbacks that have no hook equivalent:
  *
- * draftfile.php define NO_DEBUG_DISPLAY=true ANTES de cargar config.php.
- * Cuando process_legacy_callbacks() (en after_config.php de Moodle) llama
- * nuestra función, lo hace dentro de try/catch. Si la función lanza una
- * excepción, el catch llama debugging() — que está SUPRIMIDO por
- * NO_DEBUG_DISPLAY=true → silencio total.
+ *  - after_require_login: fallback fired inside require_login(). Acts when
+ *    the hook fires before the user is authenticated (e.g. cached sessions).
+ *    check_access() has a per-request static guard to prevent double execution.
  *
- * SOLUCIÓN:
- *  1. Usar require_once() explícito con rutas absolutas (evita autoloading).
- *  2. Capturar excepciones dentro de la función y silenciarlas.
- *
- * NOTA: db/hooks.php tiene $callbacks = [] (vacío) para que Moodle NO marque
- * la función legacy como "migrada" y la omita.
+ *  - pre_course_module_delete: blocks deletion of protected SCORMs from
+ *    course/lib.php (synchronous delete path only). AJAX deletions are
+ *    intercepted earlier by hook_callbacks::check_access() via service.php.
  */
 
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// CALLBACK 1: after_config — TODA petición HTTP
+// CALLBACK: after_require_login — fallback via require_login()
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /**
- * Callback legacy: fired for EVERY HTTP request at end of setup.php.
- *
- * NOTA: para que esta función sea llamada, db/hooks.php NO debe tener registrado
- * el hook \core\hook\after_config. Si lo tiene, Moodle considera que el plugin
- * "migró" al nuevo sistema y omite esta función legacy.
- */
-function local_scorm_incca_after_config(): void {
-    global $CFG, $USER;
-
-    $script = $_SERVER['SCRIPT_NAME'] ?? '';
-
-    // ── Filtrar: solo endpoints relevantes ───────────────────────────────────
-    $isDraft   = strpos($script, '/draftfile.php') !== false;
-    $isPlugin  = strpos($script, '/pluginfile.php') !== false;
-    $isAjax    = strpos($script, '/draftfiles_ajax.php') !== false;
-    $isService = strpos($script, '/lib/ajax/service.php') !== false;
-    $isBackup  = strpos($script, '/backup/backup.php') !== false;
-
-    if (!$isDraft && !$isPlugin && !$isAjax && !$isService && !$isBackup) {
-        return;
-    }
-
-    // ── Verificar usuario autenticado ────────────────────────────────────────
-    if (empty($USER) || empty($USER->id) || isguestuser($USER)) {
-        return;
-    }
-
-    // ── Cargar dependencias explícitamente ───────────────────────────────────
-    if (!empty($CFG->dirroot)) {
-        $plugindir = $CFG->dirroot . DIRECTORY_SEPARATOR . 'local' . DIRECTORY_SEPARATOR . 'scorm_incca';
-        @include_once($plugindir . DIRECTORY_SEPARATOR . 'classes' . DIRECTORY_SEPARATOR . 'debugger.php');
-        @include_once($plugindir . DIRECTORY_SEPARATOR . 'classes' . DIRECTORY_SEPARATOR . 'helper.php');
-        @include_once($plugindir . DIRECTORY_SEPARATOR . 'classes' . DIRECTORY_SEPARATOR . 'hook_callbacks.php');
-    }
-
-    // ── Ejecutar verificación central ────────────────────────────────────────
-    // Capturamos excepciones aquí porque process_legacy_callbacks las silencia.
-    try {
-        if (!class_exists('\\local_scorm_incca\\hook_callbacks', false)) {
-            return;
-        }
-        if ($isBackup) {
-            // Backup tiene flujo propio — no pasa por check_access().
-            \local_scorm_incca\hook_callbacks::handle_backup($USER);
-            return;
-        }
-        \local_scorm_incca\hook_callbacks::check_access();
-    } catch (\Throwable $e) {
-        // Silenciar: no propagar excepciones para no interrumpir la petición.
-    }
-}
-
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// CALLBACK 2: after_require_login — respaldo vía require_login()
-// ═══════════════════════════════════════════════════════════════════════════════
-
-/**
- * Callback legacy: fired after require_login() authenticates the user.
+ * Legacy callback: fired after require_login() authenticates the user.
  *
  * @param int|stdClass $courseorid
  * @param bool $autologinguest
@@ -101,52 +37,47 @@ function local_scorm_incca_after_require_login(
     $setwantsurltome,
     $preventredirect
 ): void {
-    global $CFG;
+    // Load dependencies explicitly (avoids any autoloading issues).
+    $plugindir = __DIR__;
+    @include_once($plugindir . '/classes/debugger.php');
+    @include_once($plugindir . '/classes/helper.php');
+    @include_once($plugindir . '/classes/hook_callbacks.php');
 
-    // ── Cargar dependencias explícitamente ───────────────────────────────────
-    if (!empty($CFG->dirroot)) {
-        $plugindir = $CFG->dirroot . DIRECTORY_SEPARATOR . 'local' . DIRECTORY_SEPARATOR . 'scorm_incca';
-        @include_once($plugindir . DIRECTORY_SEPARATOR . 'classes' . DIRECTORY_SEPARATOR . 'debugger.php');
-        @include_once($plugindir . DIRECTORY_SEPARATOR . 'classes' . DIRECTORY_SEPARATOR . 'helper.php');
-        @include_once($plugindir . DIRECTORY_SEPARATOR . 'classes' . DIRECTORY_SEPARATOR . 'hook_callbacks.php');
-    }
-
-    // ── Ejecutar verificación central ────────────────────────────────────────
-    // check_access() tiene guard estático. Si after_config ya actuó, retorna sin
-    // doble ejecución. Capturamos aquí para no propagar excepciones.
+    // check_access() has a static guard. If after_config hook already acted,
+    // it returns immediately without double execution.
     try {
         if (class_exists('\\local_scorm_incca\\hook_callbacks', false)) {
             \local_scorm_incca\hook_callbacks::check_access();
         }
     } catch (\Throwable $e) {
-        // Silenciar: no propagar excepciones para no interrumpir la petición.
+        // Silence: do not propagate exceptions to avoid interrupting the request.
     }
 }
 
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// CALLBACK 3: pre_course_module_delete — proteger eliminación de SCORMs protegidos
+// CALLBACK: pre_course_module_delete — protect deletion of protected SCORMs
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /**
- * Callback pre_course_module_delete (Moodle hook legacy).
- * Impide que usuarios sin permisos eliminen un SCORM protegido.
+ * Legacy hook callback: pre_course_module_delete.
+ * Prevents users without permission from deleting a protected SCORM.
  *
- * Detectado por Moodle vía get_plugins_with_function('pre_course_module_delete').
- * Se llama desde course_delete_module() en course/lib.php ANTES de borrar datos.
- * Lanzar moodle_exception aquí cancela la eliminación completamente.
+ * Detected by Moodle via get_plugins_with_function('pre_course_module_delete').
+ * Called from course_delete_module() in course/lib.php BEFORE deleting data.
+ * Throwing moodle_exception here cancels the deletion entirely.
  *
- * @param stdClass $cm  Registro de course_modules: id, course, module (FK) — NO tiene modname
+ * @param stdClass $cm  course_modules record: id, course, module (FK) — does NOT have modname.
  */
 function local_scorm_incca_pre_course_module_delete(stdClass $cm): void {
     global $USER;
 
-    // En contexto CLI/cron → no bloquear (eliminación asíncrona o automatizada).
+    // CLI/cron context → do not block (async or automated deletion).
     if (defined('CLI_SCRIPT') && CLI_SCRIPT) {
         return;
     }
 
-    // Necesita usuario autenticado para evaluar permisos.
+    // Requires an authenticated user to evaluate permissions.
     if (empty($USER->id)) {
         return;
     }
@@ -154,41 +85,41 @@ function local_scorm_incca_pre_course_module_delete(stdClass $cm): void {
     try {
         $cmid = (int)$cm->id;
 
-        // NOTA IMPORTANTE: $cm aquí viene de $DB->get_record('course_modules', ...)
-        // que NO incluye la propiedad 'modname'. Por eso NO se puede usar $cm->modname.
-        // En cambio, helper::is_protected() solo retorna true para SCORMs registrados
-        // en nuestra tabla — no hay necesidad de filtrar por tipo de módulo.
+        // NOTE: $cm here comes from $DB->get_record('course_modules', ...)
+        // which does NOT include the 'modname' property. Therefore $cm->modname
+        // cannot be used. Instead, helper::is_protected() only returns true for
+        // SCORMs registered in our table — no need to filter by module type.
 
-        // Sin restricción si el SCORM no está marcado como protegido.
+        // No restriction if the SCORM is not marked as protected.
         if (!\local_scorm_incca\helper::is_protected($cmid)) {
             return;
         }
 
-        // Site admins pueden eliminar siempre.
+        // Site admins can always delete.
         if (is_siteadmin($USER->id)) {
             return;
         }
 
-        // Verificar capability en el contexto del módulo.
+        // Check capability in the module context.
         $context = \context_module::instance($cmid, IGNORE_MISSING);
         if ($context) {
-            $canUpload   = has_capability('local/scorm_incca:cargar',    $context, $USER->id, false);
-            $canDownload = has_capability('local/scorm_incca:descargar', $context, $USER->id, false);
+            $canUpload   = has_capability('local/scorm_incca:upload',   $context, $USER->id, false);
+            $canDownload = has_capability('local/scorm_incca:download', $context, $USER->id, false);
             if ($canUpload || $canDownload) {
-                return; // Tiene permiso: permitir eliminación.
+                return; // Has permission: allow deletion.
             }
         }
 
-        // BLOQUEAR: registrar intento y lanzar excepción.
+        // BLOCK: log the attempt and throw exception.
         \local_scorm_incca\helper::log(
             \local_scorm_incca\helper::LOG_DELETE_BLOCKED,
             (int)$USER->id,
             $cmid,
-            "Eliminacion BLOQUEADA | userid={$USER->id} cmid={$cmid}"
+            "Deletion BLOCKED | userid={$USER->id} cmid={$cmid}"
         );
 
-        // moodle_exception genera la página de error estándar de Moodle.
-        // Tercer parámetro = URL del botón "Continuar" → vuelve al curso.
+        // moodle_exception generates the standard Moodle error page.
+        // Third parameter = "Continue" button URL → returns to the course.
         throw new \moodle_exception(
             'deletedenied',
             'local_scorm_incca',
@@ -196,8 +127,8 @@ function local_scorm_incca_pre_course_module_delete(stdClass $cm): void {
         );
 
     } catch (\moodle_exception $e) {
-        throw $e; // Re-propagar para cancelar la eliminación.
+        throw $e; // Re-throw to cancel the deletion.
     } catch (\Throwable $e) {
-        // Otros errores del chequeo: fail-open (no bloquear si el helper falla).
+        // Other errors from the check: fail-open (don't block if the helper fails).
     }
 }

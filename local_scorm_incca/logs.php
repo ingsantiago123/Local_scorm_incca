@@ -13,16 +13,16 @@ if (is_siteadmin()) {
     $PAGE->set_pagelayout('standard');
 }
 
-$cmid      = optional_param('cmid',      0,   PARAM_INT);
-$eventtype = optional_param('eventtype', '',  PARAM_ALPHANUMEXT);
-$page      = optional_param('page',      0,   PARAM_INT);
+$cmid      = optional_param('cmid',      0,  PARAM_INT);
+$eventtype = optional_param('eventtype', '', PARAM_ALPHANUMEXT);
+$page      = optional_param('page',      0,  PARAM_INT);
 $perpage   = 50;
 
 $PAGE->set_title(get_string('logs', 'local_scorm_incca'));
 $PAGE->set_heading(get_string('logs', 'local_scorm_incca'));
 echo $OUTPUT->header();
 
-// ── Formulario de filtros ──────────────────────────────────────────────────────
+// ── Filter form ───────────────────────────────────────────────────────────────
 $eventtypes = [
     ''                                               => get_string('filter_all',             'local_scorm_incca'),
     \local_scorm_incca\helper::LOG_UPLOAD_PROTECTED  => get_string('log_upload_protected',   'local_scorm_incca'),
@@ -65,7 +65,7 @@ if ($eventtype !== '' || $cmid) {
     echo '&nbsp;';
     echo html_writer::link(
         new moodle_url('/local/scorm_incca/logs.php'),
-        'Limpiar',
+        get_string('clear_filters', 'local_scorm_incca'),
         ['class' => 'btn btn-outline-secondary']
     );
 }
@@ -102,12 +102,12 @@ $sql = "SELECT l.id, l.eventtype, l.userid, l.cmid, l.message, l.ipaddress, l.ti
 
 $records = $DB->get_records_sql($sql, $params, $page * $perpage, $perpage);
 
-// ── Contador ───────────────────────────────────────────────────────────────────
+// ── Counter ────────────────────────────────────────────────────────────────────
 if ($total > 0) {
     $from = $page * $perpage + 1;
     $to   = min($from + $perpage - 1, $total);
     echo html_writer::tag('p',
-        "Mostrando {$from}–{$to} de {$total} registros",
+        get_string('showing_x_of_y_records', 'local_scorm_incca', (object)['from' => $from, 'to' => $to, 'total' => $total]),
         ['class' => 'text-muted small mb-2']
     );
 }
@@ -129,7 +129,7 @@ if (empty($records)) {
         'import_registered'  => 'badge-primary',
     ];
 
-    // ── Vista tabla: md y superior ─────────────────────────────────────────
+    // ── Table view: md and above ───────────────────────────────────────────
     echo html_writer::start_div('d-none d-md-block');
     echo html_writer::start_div('table-responsive');
 
@@ -151,14 +151,14 @@ if (empty($records)) {
     echo html_writer::end_div();
     echo html_writer::end_div();
 
-    // ── Vista cards: menos de md ───────────────────────────────────────────
+    // ── Card view: below md ────────────────────────────────────────────────
     echo html_writer::start_div('d-md-none');
     foreach ($records as $r) {
         echo logs_build_card($r, $badgeclass);
     }
     echo html_writer::end_div();
 
-    // ── Paginación inferior ────────────────────────────────────────────────
+    // ── Bottom pagination ──────────────────────────────────────────────────
     echo html_writer::start_div('mt-3');
     echo $OUTPUT->paging_bar($total, $page, $perpage,
         new moodle_url('/local/scorm_incca/logs.php',

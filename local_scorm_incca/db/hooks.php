@@ -2,23 +2,21 @@
 defined('MOODLE_INTERNAL') || die();
 
 /**
- * Hooks de local_scorm_incca.
+ * Hook callbacks for local_scorm_incca.
  *
- * IMPORTANTE — Por qué este archivo está vacío:
+ * We register \core\hook\after_config here so Moodle does not show the
+ * deprecation warning "Callback after_config should be migrated to new hook".
  *
- * Moodle 4.5: cuando un plugin registra un callback para \core\hook\after_config
- * en db/hooks.php, el sistema de hooks marca la función legacy
- * {plugin}_after_config() de lib.php como "migrada" y la OMITE.
- *
- * Si el callback del sistema de hooks falla silenciosamente (ej: autoloading
- * falla y draftfile.php tiene NO_DEBUG_DISPLAY=true que suprime el debugging()),
- * NADA se ejecuta — ni el hook ni el legacy.
- *
- * SOLUCIÓN: usar SOLO el mecanismo legacy en lib.php:
- *   - local_scorm_incca_after_config()       → toda petición (draftfile/pluginfile)
- *   - local_scorm_incca_after_require_login() → respaldo vía require_login()
- *
- * Ambas funciones usan require_once() explícito para cargar sus dependencias,
- * eliminando cualquier dependencia de autoloading.
+ * The callback uses explicit require_once() for its dependencies instead of
+ * relying on autoloading, so it works correctly even in draftfile.php where
+ * NO_DEBUG_DISPLAY=true suppresses errors. Any exception thrown inside the
+ * callback is caught by Moodle's hook dispatcher (try/catch around every
+ * callback invocation) and silently discarded.
  */
-$callbacks = [];
+$callbacks = [
+    [
+        'hook'     => \core\hook\after_config::class,
+        'callback' => \local_scorm_incca\hook_callbacks::class . '::after_config',
+        'priority' => 500,
+    ],
+];

@@ -4,11 +4,11 @@ namespace local_scorm_incca;
 defined('MOODLE_INTERNAL') || die();
 
 /**
- * Helper centralizado con la logica de negocio del plugin.
+ * Centralised helper with the plugin's business logic.
  */
 class helper {
 
-    /** Tipos de evento de log */
+    /** Log event type constants */
     public const LOG_UPLOAD_PROTECTED  = 'upload_protected';
     public const LOG_UPLOAD_PUBLIC     = 'upload_public';
     public const LOG_DOWNLOAD_ALLOWED  = 'download_allowed';
@@ -20,7 +20,7 @@ class helper {
     public const LOG_IMPORT_REGISTERED = 'import_registered';
 
     /**
-     * Registra un SCORM en la tabla del plugin con su estado de proteccion.
+     * Registers a SCORM in the plugin table with its protection status.
      *
      * @param int  $cmid
      * @param int  $scormid
@@ -55,18 +55,18 @@ class helper {
     }
 
     /**
-     * Registra todos los SCORMs del curso destino que no están en la tabla,
-     * heredando el estado isprotected del curso origen via sha1hash del paquete.
+     * Registers all SCORMs in the destination course that are not yet in the table,
+     * inheriting the isprotected status from the source course via the package sha1hash.
      *
-     * Llamado desde observer::course_restored() después de un import/restore.
-     * Matching origen→destino: mdl_scorm.sha1hash (mismo contenido de paquete).
+     * Called from observer::course_restored() after an import/restore.
+     * Source→destination matching: mdl_scorm.sha1hash (same package content).
      *
-     * Política cuando no hay match (AICC, externo, sha1hash null, restore .mbz sin
-     * originalcourseid): isprotected = false (el admin puede ajustar desde el panel).
+     * Policy when no match is found (AICC, external, null sha1hash, .mbz restore
+     * without originalcourseid): isprotected = false (admin can adjust from the panel).
      *
-     * @param int $destcourseid   ID del curso destino (recién restaurado).
-     * @param int $importerid     ID del usuario que ejecutó el import.
-     * @param int $sourcecourse   ID del curso origen (0 si no disponible).
+     * @param int $destcourseid   ID of the destination course (just restored).
+     * @param int $importerid     ID of the user who ran the import.
+     * @param int $sourcecourse   ID of the source course (0 if not available).
      */
     public static function register_imported_scorms(
         int $destcourseid,
@@ -75,10 +75,10 @@ class helper {
     ): void {
         global $DB;
 
-        // SCORMs en el curso destino que todavía no tienen registro en el plugin.
-        // Seleccionamos s.name: es el identificador de instancia exacto que Moodle preserva
-        // durante el restore. A diferencia del sha1hash (hash del paquete), el name distingue
-        // cada actividad SCORM individualmente aunque compartan el mismo archivo ZIP.
+        // SCORMs in the destination course not yet registered in the plugin.
+        // We select s.name: it is the exact instance identifier that Moodle preserves
+        // during restore. Unlike sha1hash (package content hash), the name uniquely
+        // identifies each SCORM activity even if they share the same ZIP file.
         $sql = "SELECT cm.id AS cmid, cm.instance AS scormid, s.name AS scorm_name
                   FROM {course_modules} cm
                   JOIN {modules} m  ON m.id = cm.module AND m.name = 'scorm'
@@ -98,19 +98,19 @@ class helper {
             $isprotected = false;
 
             if ($sourcecourse > 0) {
-                // Buscar el SCORM origen por nombre de actividad.
+                // Look up the source SCORM by activity name.
                 //
-                // ¿Por qué nombre y no sha1hash?
-                // El sha1hash identifica el CONTENIDO del paquete ZIP, no la instancia SCORM.
-                // Si el mismo ZIP se sube varias veces (paquete público Y protegido), todos comparten
-                // el mismo hash → el MAX() por hash daría falso positivo para los públicos.
-                // El nombre de la actividad identifica la instancia específica (Moodle lo preserva
-                // exactamente durante el restore) y distingue entre dos SCORMs del mismo paquete
-                // que tienen distinto estado de protección.
+                // Why name and not sha1hash?
+                // sha1hash identifies the CONTENT of the ZIP package, not the SCORM instance.
+                // If the same ZIP is uploaded multiple times (one public, one protected), they
+                // all share the same hash → MAX() by hash would give false positives for the
+                // public ones. The activity name identifies the specific instance (Moodle
+                // preserves it exactly during restore) and distinguishes between two SCORMs
+                // of the same package that have different protection states.
                 //
-                // Si hay nombre duplicado en el origen (improbable pero posible), MAX() devuelve
-                // el estado más restrictivo entre ellos — mismo comportamiento conservador del bug
-                // anterior pero acotado a duplicados reales de nombre, no de contenido.
+                // If there are duplicate names in the source (unlikely but possible), MAX()
+                // returns the most restrictive state among them — same conservative behaviour
+                // as the previous bug but limited to actual name duplicates, not content duplicates.
                 $maxProtected = $DB->get_field_sql(
                     "SELECT MAX(si.isprotected)
                        FROM {scorm} s_dest
@@ -123,7 +123,7 @@ class helper {
                     ['destscormid' => (int) $row->scormid, 'sourcecourse' => $sourcecourse]
                 );
 
-                // null → ningún SCORM con ese nombre en el origen tiene registro → público.
+                // null → no SCORM with that name in the source has a record → public.
                 $isprotected = (bool) $maxProtected;
             }
 
@@ -139,16 +139,16 @@ class helper {
                 self::LOG_IMPORT_REGISTERED,
                 $importerid,
                 (int) $row->cmid,
-                'SCORM importado registrado. isprotected=' . ($isprotected ? '1' : '0')
+                'Imported SCORM registered. isprotected=' . ($isprotected ? '1' : '0')
                     . ' sourcecourse=' . $sourcecourse
             );
         }
     }
 
     /**
-     * Devuelve los cmids de SCORMs protegidos en un curso.
-     * Usado por hook_callbacks::handle_backup() para detectar si el curso
-     * tiene contenido protegido antes de permitir la creación del backup.
+     * Returns the cmids of protected SCORMs in a course.
+     * Used by hook_callbacks::handle_backup() to detect whether the course
+     * has protected content before allowing backup creation.
      */
     public static function get_protected_cmids_in_course(int $courseid): array {
         global $DB;
@@ -160,7 +160,7 @@ class helper {
     }
 
     /**
-     * Elimina el registro de un SCORM (cuando se borra la actividad).
+     * Removes the registration of a SCORM (when the activity is deleted).
      */
     public static function unregister_scorm(int $cmid): void {
         global $DB;
@@ -168,7 +168,7 @@ class helper {
     }
 
     /**
-     * Indica si un course module corresponde a un SCORM protegido.
+     * Returns whether a course module corresponds to a protected SCORM.
      */
     public static function is_protected(int $cmid): bool {
         global $DB;
@@ -179,7 +179,7 @@ class helper {
     }
 
     /**
-     * Inserta una entrada en el log del plugin.
+     * Inserts an entry in the plugin log.
      */
     public static function log(string $eventtype, int $userid, ?int $cmid, string $message): void {
         global $DB;
@@ -195,32 +195,32 @@ class helper {
     }
 
     /**
-     * Parsea la URL de pluginfile.php / draftfile.php y devuelve sus componentes.
+     * Parses the URL of pluginfile.php / draftfile.php and returns its components.
      *
-     * Formato: /{contextid}/{component}/{filearea}/{itemid}/{filename}
+     * Format: /{contextid}/{component}/{filearea}/{itemid}/{filename}
      *
-     * Soporta tres modos de entrega de la ruta:
-     *  1. PATH_INFO  (slasharguments = 1, modo normal)
-     *  2. REQUEST_URI menos SCRIPT_NAME  (algunos servidores/proxies)
-     *  3. Parametro GET 'file'  (slasharguments = 0)
+     * Supports three path delivery modes:
+     *  1. PATH_INFO  (slasharguments = 1, normal mode)
+     *  2. REQUEST_URI minus SCRIPT_NAME  (some servers/proxies)
+     *  3. GET parameter 'file'  (slasharguments = 0)
      *
-     * @return array|null ['contextid','component','filearea','itemid','filename'] o null
+     * @return array|null ['contextid','component','filearea','itemid','filename'] or null
      */
     public static function parse_pluginfile_path(): ?array {
 
-        // Intento 1: PATH_INFO estandar.
+        // Attempt 1: standard PATH_INFO.
         $pathinfo = $_SERVER['PATH_INFO'] ?? '';
 
-        // Intento 2: derivar de REQUEST_URI quitando el nombre del script.
+        // Attempt 2: derive from REQUEST_URI by removing the script name.
         if (empty($pathinfo)) {
             $scriptname = $_SERVER['SCRIPT_NAME'] ?? '';
-            $requesturi = strtok($_SERVER['REQUEST_URI'] ?? '', '?'); // sin query string
+            $requesturi = strtok($_SERVER['REQUEST_URI'] ?? '', '?'); // strip query string
             if ($scriptname && strpos($requesturi, $scriptname) === 0) {
                 $pathinfo = substr($requesturi, strlen($scriptname));
             }
         }
 
-        // Intento 3: parametro GET 'file' (Moodle con slasharguments = 0).
+        // Attempt 3: GET parameter 'file' (Moodle with slasharguments = 0).
         if (empty($pathinfo)) {
             $pathinfo = $_GET['file'] ?? '';
         }
@@ -229,7 +229,7 @@ class helper {
             return null;
         }
 
-        // Remover slash inicial y dividir.
+        // Strip leading slash and split.
         $parts = explode('/', ltrim($pathinfo, '/'));
         if (count($parts) < 4) {
             return null;
@@ -245,7 +245,7 @@ class helper {
     }
 
     /**
-     * Indica si la peticion actual es a pluginfile.php.
+     * Returns whether the current request is to pluginfile.php.
      */
     public static function is_pluginfile_request(): bool {
         $script = $_SERVER['SCRIPT_NAME'] ?? '';
@@ -253,11 +253,11 @@ class helper {
     }
 
     /**
-     * Indica si la peticion actual es a draftfile.php.
+     * Returns whether the current request is to draftfile.php.
      *
-     * draftfile.php sirve archivos del area de borrador del usuario (file-manager
-     * en modo edicion). Tambien llama require_login(), por lo que el hook se
-     * dispara, pero el endpoint diferente no estaba cubierto por la proteccion.
+     * draftfile.php serves files from the user's draft area (file manager in edit
+     * mode). It also calls require_login(), so our hook fires, but this different
+     * endpoint was not previously covered by the protection.
      */
     public static function is_draftfile_request(): bool {
         $script = $_SERVER['SCRIPT_NAME'] ?? '';
@@ -265,13 +265,13 @@ class helper {
     }
 
     /**
-     * Indica si la peticion actual es al endpoint AJAX de servicios web (lib/ajax/service.php).
+     * Returns whether the current request is to the web service AJAX endpoint (lib/ajax/service.php).
      *
-     * Este endpoint procesa acciones del editor de cursos de Moodle 4.x, incluidas las
-     * eliminaciones de módulos vía core_courseformat_update_course (action=cm_delete) y
-     * core_course_edit_module (action=delete). Ambas llaman course_delete_module($id, true)
-     * que usa eliminación asíncrona y por tanto NO dispara pre_course_module_delete en el
-     * contexto web. Por eso la intercepción debe hacerse aquí, antes de que el servicio corra.
+     * This endpoint processes actions from the Moodle 4.x course editor, including
+     * module deletions via core_courseformat_update_course (action=cm_delete) and
+     * core_course_edit_module (action=delete). Both call course_delete_module($id, true)
+     * which uses async deletion and therefore does NOT fire pre_course_module_delete in
+     * the web context. The interception must happen here, before the service runs.
      */
     public static function is_ajax_service_request(): bool {
         $script = $_SERVER['SCRIPT_NAME'] ?? '';
@@ -279,20 +279,20 @@ class helper {
     }
 
     /**
-     * Indica si la peticion actual es al endpoint AJAX de archivos borrador.
+     * Returns whether the current request is to the draft files AJAX endpoint.
      *
-     * draftfiles_ajax.php es llamado por el file-manager cuando el usuario hace
-     * clic en "Descargar todos como ZIP". Llama require_login(), por lo que
-     * nuestro callback se dispara. Interceptamos AQUI para filtrar los archivos
-     * protegidos ANTES de que se genere el ZIP, ya que el ZIP resultante tiene
-     * un contenthash nuevo que no coincide con ningun SCORM registrado.
+     * draftfiles_ajax.php is called by the file manager when the user clicks
+     * "Download all as ZIP". It calls require_login(), so our callback fires.
+     * We intercept HERE to filter protected files BEFORE the ZIP is generated,
+     * because the resulting ZIP has a new contenthash that does not match any
+     * registered SCORM.
      *
-     * Flujo:
+     * Flow:
      *   POST /repository/draftfiles_ajax.php?action=downloadselected
-     *   -> require_login() -> nuestro callback -> filtrar $_POST['selected']
-     *   -> genera ZIP solo con archivos permitidos
-     *   -> devuelve URL a GET /draftfile.php/.../files.zip
-     *   -> nuestro callback en draftfile.php ya no necesita actuar sobre el ZIP
+     *   -> require_login() -> our callback -> filter $_POST['selected']
+     *   -> generates ZIP with permitted files only
+     *   -> returns URL to GET /draftfile.php/.../files.zip
+     *   -> our callback in draftfile.php no longer needs to act on the ZIP
      */
     public static function is_draftfiles_ajax_request(): bool {
         $script = $_SERVER['SCRIPT_NAME'] ?? '';
@@ -300,32 +300,32 @@ class helper {
     }
 
     /**
-     * Dado un itemid de borrador y un nombre de archivo, determina si ese
-     * borrador corresponde a un SCORM protegido.
+     * Given a draft itemid and filename, determines whether that draft corresponds
+     * to a protected SCORM.
      *
-     * ESTRATEGIA (en orden de prioridad):
+     * STRATEGY (in order of priority):
      *
-     * 1. CAMPO 'source' del borrador (más preciso):
-     *    Moodle guarda en mdl_files.source un objeto PHP serializado con:
-     *      - source->original = "{contextid}/mod_scorm/package/{itemid}/{filepath}/{filename}"
-     *      - source->source   = URL del archivo original (puede estar vacia)
-     *    Extrayendo el contextid del campo 'original' identificamos exactamente
-     *    qué SCORM se estaba editando → decision exacta sin falsos positivos.
+     * 1. 'source' field of the draft (most precise):
+     *    Moodle stores in mdl_files.source a PHP-serialised object with:
+     *      - source->original = pack_reference (base64+serialised object with contextid, etc.)
+     *      - source->source   = URL of the original file (may be empty)
+     *    Extracting the contextid from 'original' identifies exactly which SCORM
+     *    was being edited → exact decision with no false positives.
      *
-     * 2. CONTENTHASH como fallback (postura segura):
-     *    Si el 'source' no identifica el SCORM exacto, bloqueamos si AL MENOS
-     *    UN SCORM con ese hash de contenido es protegido.
-     *    Motivo: no podemos saber qué SCORM editaba el usuario, y la postura
-     *    de seguridad es no permitir si el contenido pertenece a algo protegido.
+     * 2. CONTENTHASH fallback (safe posture):
+     *    If 'source' does not identify the exact SCORM, block if AT LEAST ONE SCORM
+     *    with that content hash is protected.
+     *    Reason: we cannot determine which SCORM the user was editing, and the
+     *    secure posture is to deny if the content belongs to something protected.
      *
-     * @param int    $draftitemid ID del area de borrador
-     * @param string $filename    Nombre del archivo (p. ej. "curso.zip")
-     * @return int|null cmid del SCORM protegido, o null si se permite la descarga
+     * @param int    $draftitemid Draft area ID
+     * @param string $filename    File name (e.g. "course.zip")
+     * @return int|null cmid of the protected SCORM, or null if download is allowed
      */
     public static function find_protected_scorm_by_draft(int $draftitemid, string $filename): ?int {
         global $DB;
 
-        // Obtener el registro del archivo borrador.
+        // Retrieve the draft file record.
         $draftfile = $DB->get_record('files', [
             'component' => 'user',
             'filearea'  => 'draft',
@@ -337,17 +337,18 @@ class helper {
             return null;
         }
 
-        // ── Intento 1: campo 'source' del borrador ───────────────────────────
+        // ── Attempt 1: 'source' field of the draft ───────────────────────────
         //
-        // Moodle (lib/filelib.php file_prepare_draft_area) guarda en source un
-        // objeto PHP serializado: serialize((object)['source'=>..., 'original'=>...])
-        // El campo 'original' tiene formato: "{contextid}/{component}/{filearea}/..."
+        // Moodle (lib/filelib.php file_prepare_draft_area) stores in source a
+        // PHP-serialised object: serialize((object)['source'=>..., 'original'=>...])
+        // The 'original' field contains a pack_reference:
+        //   base64_encode(serialize((object){contextid, component, filearea, itemid, filename, filepath}))
         //
-        // Ejemplo real:
-        //   original = "55/mod_scorm/package/0//paquetev2.zip"
-        //   → contextid=55 → context_module → cmid=27
+        // Example:
+        //   original = "55/mod_scorm/package/0//packagev2.zip" (legacy flat path)
+        //   or pack_reference blob → contextid=55 → context_module → cmid=27
         //
-        // También intentamos con JSON y URL directa por compatibilidad.
+        // We also try JSON and direct URL for compatibility with older or custom installs.
         if (!empty($draftfile->source)) {
             $contextid = self::extract_source_contextid($draftfile->source);
 
@@ -361,11 +362,11 @@ class helper {
             }
         }
 
-        // ── Intento 2: fallback por contenthash ──────────────────────────────
+        // ── Attempt 2: contenthash fallback ──────────────────────────────────
         //
-        // Buscamos todos los SCORMs registrados con este contenthash.
-        // Si alguno es protegido → bloquear (postura de seguridad).
-        // Si todos son publicos → permitir.
+        // Find all registered SCORMs with this content hash.
+        // If any is protected → block (secure posture).
+        // If all are public → allow.
         $sql = "SELECT s.cmid, s.isprotected
                   FROM {local_scorm_incca_items} s
                   JOIN {context} ctx ON ctx.instanceid = s.cmid
@@ -382,72 +383,72 @@ class helper {
         ]);
 
         if (empty($records)) {
-            return null; // No es un paquete controlado.
+            return null; // Not a controlled package.
         }
 
-        // Postura de seguridad: si CUALQUIER SCORM con este contenido es protegido,
-        // bloqueamos. No podemos determinar qué SCORM exacto se editaba (source falló),
-        // por lo que elegimos la opción más segura.
+        // Secure posture: if ANY SCORM with this content is protected, block.
+        // We cannot determine which exact SCORM was being edited (source failed),
+        // so we choose the safer option.
         foreach ($records as $record) {
             if ((int)$record->isprotected) {
                 return (int)$record->cmid;
             }
         }
 
-        // Todos públicos → permitir.
+        // All public → allow.
         return null;
     }
 
     /**
-     * Extrae el contextid del campo 'source' de un archivo borrador de Moodle.
+     * Extracts the contextid from the 'source' field of a Moodle draft file.
      *
-     * Moodle (lib/filelib.php, file_prepare_draft_area) almacena source así:
+     * Moodle (lib/filelib.php, file_prepare_draft_area) stores source as:
      *
      *   serialize((object)[
-     *       'source'   => <URL pluginfile o vacío>,
+     *       'source'   => <pluginfile URL or empty>,
      *       'original' => file_storage::pack_reference($original),
      *   ])
      *
-     * donde pack_reference = base64_encode(serialize((object){contextid, component, filearea, itemid, filename, filepath}))
+     * where pack_reference = base64_encode(serialize((object){contextid, component,
+     * filearea, itemid, filename, filepath}))
      *
-     * Por tanto el campo 'original' NO es un path plano — es un blob base64+serializado.
-     * Hay que desempacarlo con unserialize(base64_decode(...)).
+     * So 'original' is NOT a plain path — it is a base64+serialised blob.
+     * It must be unpacked with unserialize(base64_decode(...)).
      *
-     * Formatos soportados (en orden de prevalencia):
-     *  1. PHP serializado (Moodle 4.x estándar): serialize((object){source, original})
+     * Supported formats (in order of prevalence):
+     *  1. PHP serialised (standard Moodle 4.x): serialize((object){source, original})
      *  2. JSON: {"source":"...","original":"..."}
-     *  3. URL directa: http://.../pluginfile.php/CTX/mod_scorm/package/...
+     *  3. Direct URL: http://.../pluginfile.php/CTX/mod_scorm/package/...
      *
-     * @param  string   $source  Valor raw de mdl_files.source
-     * @return int|null contextid si se pudo extraer, null en otro caso
+     * @param  string   $source  Raw value of mdl_files.source
+     * @return int|null contextid if successfully extracted, null otherwise
      */
     private static function extract_source_contextid(string $source): ?int {
 
-        // ── Formato 1: PHP serializado (estándar Moodle 4.x) ─────────────────
-        // Detectar por marcadores del serialize de stdClass
+        // ── Format 1: PHP serialised (standard Moodle 4.x) ───────────────────
         if (strpos($source, 'O:8:"stdClass"') !== false || strpos($source, 's:8:"original"') !== false) {
             $obj = @unserialize($source);
             if ($obj && isset($obj->original)) {
                 // original = file_storage::pack_reference($orig)
-                //          = base64_encode(serialize((object){contextid, component, filearea, itemid, filename, filepath}))
+                //          = base64_encode(serialize((object){contextid, component, filearea, ...}))
                 $unpacked = @unserialize(@base64_decode($obj->original));
-                
+
                 if (is_array($unpacked)) {
                     $unpacked = (object) $unpacked;
                 }
-                
+
                 if (is_object($unpacked)
                     && isset($unpacked->contextid)
                     && isset($unpacked->component)
                     && $unpacked->component === 'mod_scorm') {
                     return (int)$unpacked->contextid;
                 }
-                // Fallback dentro del mismo formato: path plano (versiones antiguas/personalizadas)
+                // Fallback within the same format: flat path (older/custom installs).
                 if (preg_match('#^(\d+)/mod_scorm/package/#', $obj->original, $m)) {
                     return (int)$m[1];
                 }
             }
-            // Intentar también source->source como URL pluginfile directa
+            // Also try source->source as a direct pluginfile URL.
             if ($obj && !empty($obj->source)) {
                 if (preg_match('#pluginfile\.php/(\d+)/mod_scorm/package#', $obj->source, $m)) {
                     return (int)$m[1];
@@ -455,25 +456,25 @@ class helper {
             }
         }
 
-        // ── Formato 2: JSON ───────────────────────────────────────────────────
+        // ── Format 2: JSON ────────────────────────────────────────────────────
         $json = json_decode($source, true);
         if (is_array($json)) {
             $original = $json['original'] ?? '';
             if ($original) {
-                // Intentar desempacar como pack_reference
+                // Try to unpack as a pack_reference.
                 $unpacked = @unserialize(@base64_decode($original));
-                
+
                 if (is_array($unpacked)) {
                     $unpacked = (object) $unpacked;
                 }
-                
+
                 if (is_object($unpacked)
                     && isset($unpacked->contextid)
                     && isset($unpacked->component)
                     && $unpacked->component === 'mod_scorm') {
                     return (int)$unpacked->contextid;
                 }
-                // Fallback: path plano
+                // Fallback: flat path.
                 if (preg_match('#^(\d+)/mod_scorm/package/#', $original, $m)) {
                     return (int)$m[1];
                 }
@@ -484,7 +485,7 @@ class helper {
             }
         }
 
-        // ── Formato 3: URL directa ────────────────────────────────────────────
+        // ── Format 3: direct URL ──────────────────────────────────────────────
         if (preg_match('#pluginfile\.php/(\d+)/mod_scorm/package#', $source, $m)) {
             return (int)$m[1];
         }

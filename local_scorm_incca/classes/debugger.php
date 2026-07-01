@@ -4,20 +4,19 @@ namespace local_scorm_incca;
 defined('MOODLE_INTERNAL') || die();
 
 /**
- * Logger de depuracion para diagnosticar el flujo de descarga SCORM.
+ * Debug logger for diagnosing the SCORM download flow.
  *
- * Escribe en {moodledata}/local_scorm_incca_debug.log.
- * El archivo NO es accesible via web (esta fuera del docroot).
+ * Writes to {moodledata}/local_scorm_incca_debug.log.
+ * The file is NOT accessible via the web (it is outside the docroot).
  *
- * Uso: ver el log en la pagina de administracion
- *      Administracion > Extensiones > SCORM INCCA > Debug Log
+ * Usage: view the log on the admin page
+ *        Administration > Plugins > SCORM INCCA > Debug Log
  *
- * NOTA: Deshabilitar en produccion eliminando las llamadas a debugger::log()
- *       o usando la constante SCORM_INCCA_DEBUG = false.
+ * NOTE: Disable in production by setting ENABLED = false.
  */
 class debugger {
 
-    /** @var bool Activar/desactivar el debug sin tocar el codigo */
+    /** @var bool Enable/disable debug logging without touching production code. */
     public const ENABLED = false;
 
     public static function log(string $section, array $data = []): void {
@@ -29,7 +28,7 @@ class debugger {
             return;
         }
         $logfile = self::get_path();
-        // Microsegundos para ordenar entradas del mismo segundo.
+        // Milliseconds to order entries within the same second.
         $ms = sprintf('%03d', (int)(microtime(true) * 1000) % 1000);
         $ts = date('Y-m-d H:i:s') . '.' . $ms;
         $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
@@ -38,8 +37,8 @@ class debugger {
     }
 
     /**
-     * Registra TODOS los valores $_SERVER relevantes para diagnosticar la peticion.
-     * Llamar al inicio del hook para capturar el contexto completo.
+     * Logs ALL relevant $_SERVER values to diagnose the request.
+     * Call at the beginning of the hook to capture the full context.
      */
     public static function log_request(int $userid): void {
         self::log('REQUEST', [
@@ -75,9 +74,9 @@ class debugger {
     }
 
     /**
-     * Escribe SIEMPRE en el log de diagnóstico general (ignora ENABLED).
-     * Archivo: {moodledata}/local_scorm_incca_diag.log
-     * Usar para rastrear flujos específicos. Eliminar llamadas antes de producción estable.
+     * Always writes to the general diagnostic log (ignores ENABLED).
+     * File: {moodledata}/local_scorm_incca_diag.log
+     * Use to trace specific flows. Remove calls before stable production release.
      */
     public static function logDiag(string $section, array $data = []): void {
         global $CFG;
@@ -93,9 +92,9 @@ class debugger {
     }
 
     /**
-     * Escribe SIEMPRE en el log de importación (ignora ENABLED).
-     * Archivo: {moodledata}/local_scorm_incca_import.log
-     * Eliminar estas llamadas antes de pasar a producción estable.
+     * Always writes to the import log (ignores ENABLED).
+     * File: {moodledata}/local_scorm_incca_import.log
+     * Remove these calls before stable production release.
      */
     public static function logImport(string $section, array $data = []): void {
         global $CFG;

@@ -13,7 +13,7 @@ if (is_siteadmin()) {
     $PAGE->set_pagelayout('standard');
 }
 
-// ── Helper interno de limpieza ─────────────────────────────────────────────────
+// ── Internal cleanup helper ────────────────────────────────────────────────────
 function scorm_incca_delete_orphans(): int {
     global $DB;
     $items   = $DB->get_records('local_scorm_incca_items', [], '', 'id, cmid');
@@ -38,10 +38,10 @@ function scorm_incca_delete_orphans(): int {
 try {
     scorm_incca_delete_orphans();
 } catch (\Throwable $e) {
-    // No romper el panel si la limpieza falla.
+    //Do not break the panel if cleanup fails.
 }
 
-// ── Parámetros GET ─────────────────────────────────────────────────────────────
+// ── GET parameters ─────────────────────────────────────────────────────────────
 $filter  = optional_param('filter',  'all', PARAM_ALPHA);
 $search  = optional_param('search',  '',    PARAM_TEXT);
 $page    = optional_param('page',    0,     PARAM_INT);
@@ -49,24 +49,24 @@ $perpage = 10;
 $action  = optional_param('action',  '',    PARAM_ALPHA);
 $cmid    = optional_param('cmid',    0,     PARAM_INT);
 
-// ── Acciones POST ──────────────────────────────────────────────────────────────
+// ── POST actions ───────────────────────────────────────────────────────────────
 if ($action === 'toggle' && $cmid && confirm_sesskey()) {
     $rec    = $DB->get_record('local_scorm_incca_items', ['cmid' => $cmid], '*', MUST_EXIST);
     $newval = $rec->isprotected ? 0 : 1;
     $DB->set_field('local_scorm_incca_items', 'isprotected', $newval, ['cmid' => $cmid]);
-    $DB->set_field('local_scorm_incca_items', 'timemodified', time(),  ['cmid' => $cmid]);
-    $label  = $newval ? 'PROTEGIDO' : 'PUBLICO';
+    $DB->set_field('local_scorm_incca_items', 'timemodified', time(), ['cmid' => $cmid]);
+    $msgkey = $newval ? 'changed_to_protected' : 'changed_to_public';
     \local_scorm_incca\helper::log(
         \local_scorm_incca\helper::LOG_UPLOAD_PROTECTED,
         (int)$USER->id,
         $cmid,
-        "Estado cambiado manualmente a {$label} | cmid={$cmid} por userid={$USER->id}"
+        "Status changed manually to " . ($newval ? 'PROTECTED' : 'PUBLIC') . " | cmid={$cmid} by userid={$USER->id}"
     );
     redirect(
         new moodle_url('/local/scorm_incca/index.php', [
             'filter' => $filter, 'search' => $search, 'page' => $page,
         ]),
-        "SCORM cmid={$cmid} ahora es {$label}.",
+        get_string($msgkey, 'local_scorm_incca', (object)['cmid' => $cmid]),
         null,
         \core\output\notification::NOTIFY_SUCCESS
     );
@@ -77,24 +77,23 @@ if ($action === 'cleanup' && confirm_sesskey()) {
         $deleted = scorm_incca_delete_orphans();
         redirect(
             new moodle_url('/local/scorm_incca/index.php'),
-            "Limpieza: {$deleted} registros huérfanos eliminados.",
+            get_string('cleanup_result', 'local_scorm_incca', $deleted),
             null,
             \core\output\notification::NOTIFY_SUCCESS
         );
     } catch (\Throwable $e) {
         redirect(
             new moodle_url('/local/scorm_incca/index.php'),
-            "Error en limpieza: " . $e->getMessage(),
+            get_string('cleanup_error', 'local_scorm_incca', $e->getMessage()),
             null,
             \core\output\notification::NOTIFY_ERROR
         );
     }
 }
 
-// ── SQL: condición de filtro + búsqueda ────────────────────────────────────────
+// ── SQL: filter + search condition ────────────────────────────────────────────
 $params = [];
-
-$where = '1=1';
+$where  = '1=1';
 if ($filter === 'protected') $where = 'i.isprotected = 1';
 if ($filter === 'public')    $where = 'i.isprotected = 0';
 
@@ -103,9 +102,9 @@ $searchparams = [];
 $searchclean  = trim($search);
 if ($searchclean !== '') {
     $searchsql =
-        ' AND (' . $DB->sql_like('s.name',       ':searchname',   false) .
-        ' OR '  . $DB->sql_like('c.fullname',    ':searchcourse', false) .
-        ' OR '  . $DB->sql_like('c.shortname',   ':searchshort',  false) . ')';
+        ' AND (' . $DB->sql_like('s.name',     ':searchname',   false) .
+        ' OR '  . $DB->sql_like('c.fullname',  ':searchcourse', false) .
+        ' OR '  . $DB->sql_like('c.shortname', ':searchshort',  false) . ')';
     $esc = '%' . $DB->sql_like_escape($searchclean) . '%';
     $searchparams = ['searchname' => $esc, 'searchcourse' => $esc, 'searchshort' => $esc];
 }
@@ -130,25 +129,22 @@ $selectsql = "SELECT i.id, i.cmid, i.scormid, i.courseid, i.isprotected,
 
 $records = $DB->get_records_sql($selectsql, $allparams, $page * $perpage, $perpage);
 
-// ── Encabezado ────────────────────────────────────────────────────────────────
+// ── Page header ───────────────────────────────────────────────────────────────
 $PAGE->set_title(get_string('protected_list', 'local_scorm_incca'));
 $PAGE->set_heading(get_string('protected_list', 'local_scorm_incca'));
 echo $OUTPUT->header();
 
-// ── Barra de búsqueda ─────────────────────────────────────────────────────────
-echo html_writer::start_tag('form', [
-    'method' => 'get',
-    'class'  => 'mb-3',
-]);
+// ── Search bar ────────────────────────────────────────────────────────────────
+echo html_writer::start_tag('form', ['method' => 'get', 'class' => 'mb-3']);
 echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'filter', 'value' => $filter]);
 echo html_writer::start_div('input-group');
 echo html_writer::empty_tag('input', [
-    'type'        => 'text',
-    'name'        => 'search',
-    'value'       => s($searchclean),
-    'placeholder' => get_string('search_placeholder', 'local_scorm_incca'),
-    'class'       => 'form-control',
-    'autocomplete'=> 'off',
+    'type'         => 'text',
+    'name'         => 'search',
+    'value'        => s($searchclean),
+    'placeholder'  => get_string('search_placeholder', 'local_scorm_incca'),
+    'class'        => 'form-control',
+    'autocomplete' => 'off',
 ]);
 echo html_writer::start_tag('div', ['class' => 'input-group-append']);
 echo html_writer::empty_tag('input', [
@@ -160,14 +156,14 @@ if ($searchclean !== '') {
     echo html_writer::link(
         new moodle_url('/local/scorm_incca/index.php', ['filter' => $filter]),
         '✕',
-        ['class' => 'btn btn-outline-secondary', 'title' => 'Limpiar búsqueda']
+        ['class' => 'btn btn-outline-secondary', 'title' => get_string('clear_search', 'local_scorm_incca')]
     );
 }
 echo html_writer::end_tag('div');
 echo html_writer::end_div();
 echo html_writer::end_tag('form');
 
-// ── Fila de filtros + acciones ────────────────────────────────────────────────
+// ── Filter row + actions ──────────────────────────────────────────────────────
 echo html_writer::start_div('mb-3 d-flex gap-2 flex-wrap align-items-center');
 
 $filtersMap = [
@@ -188,15 +184,18 @@ echo '&nbsp;&nbsp;';
 $cleanupurl = new moodle_url('/local/scorm_incca/index.php', [
     'action' => 'cleanup', 'sesskey' => sesskey(),
 ]);
-echo html_writer::link($cleanupurl, $OUTPUT->pix_icon('t/delete', '') . ' Limpiar huérfanos', [
-    'class'   => 'btn btn-outline-danger mr-1',
-    'title'   => 'Elimina registros de SCORMs que ya fueron borrados de Moodle',
-    'onclick' => 'return confirm("¿Eliminar registros de SCORMs que ya no existen en Moodle?")',
-]);
+echo html_writer::link($cleanupurl,
+    $OUTPUT->pix_icon('t/delete', '') . ' ' . get_string('cleanup_orphans', 'local_scorm_incca'),
+    [
+        'class'   => 'btn btn-outline-danger mr-1',
+        'title'   => get_string('cleanup_orphans_title', 'local_scorm_incca'),
+        'onclick' => 'return confirm(' . json_encode(get_string('cleanup_orphans_confirm', 'local_scorm_incca')) . ')',
+    ]
+);
 
 echo html_writer::end_div();
 
-// ── Contador y paginación superior ────────────────────────────────────────────
+// ── Counter and top pagination ────────────────────────────────────────────────
 if ($total > 0) {
     $from  = $page * $perpage + 1;
     $to    = min($from + $perpage - 1, $total);
@@ -207,12 +206,12 @@ if ($total > 0) {
     );
 }
 
-// ── Tabla (desktop) / Cards (móvil) ───────────────────────────────────────────
+// ── Table (desktop) / Cards (mobile) ─────────────────────────────────────────
 if (empty($records)) {
     echo $OUTPUT->notification(get_string('no_records', 'local_scorm_incca'), 'info');
 } else {
 
-    // ── Vista tabla: md y superior ──────────────────────────────────────────
+    // ── Table view: md and above ────────────────────────────────────────────
     echo html_writer::start_div('d-none d-md-block');
     echo html_writer::start_div('table-responsive');
 
@@ -234,14 +233,14 @@ if (empty($records)) {
     echo html_writer::end_div(); // table-responsive
     echo html_writer::end_div(); // d-none d-md-block
 
-    // ── Vista cards: menos de md ────────────────────────────────────────────
+    // ── Card view: below md ─────────────────────────────────────────────────
     echo html_writer::start_div('d-md-none');
     foreach ($records as $r) {
         echo scorm_incca_build_card($r, $filter, $searchclean, $page, $OUTPUT);
     }
     echo html_writer::end_div();
 
-    // ── Paginación inferior ─────────────────────────────────────────────────
+    // ── Bottom pagination ───────────────────────────────────────────────────
     $pageurl = new moodle_url('/local/scorm_incca/index.php', [
         'filter' => $filter, 'search' => $searchclean,
     ]);
@@ -252,23 +251,22 @@ if (empty($records)) {
 
 echo $OUTPUT->footer();
 
-// ── Helpers de renderizado ─────────────────────────────────────────────────────
+// ── Rendering helpers ──────────────────────────────────────────────────────────
 
 function scorm_incca_status_badge(bool $isprotected, $OUTPUT): string {
-    global $CFG;
     return $isprotected
         ? html_writer::tag('span',
-            $OUTPUT->pix_icon('t/locked', '') . ' Protegido',
+            $OUTPUT->pix_icon('t/locked', '') . ' ' . get_string('protected_badge', 'local_scorm_incca'),
             ['class' => 'badge badge-danger', 'style' => 'font-size:11px'])
         : html_writer::tag('span',
-            $OUTPUT->pix_icon('t/unlocked', '') . ' Público',
+            $OUTPUT->pix_icon('t/unlocked', '') . ' ' . get_string('public_badge', 'local_scorm_incca'),
             ['class' => 'badge badge-secondary', 'style' => 'font-size:11px']);
 }
 
 function scorm_incca_toggle_btn(object $r, string $filter, string $search, int $page, $OUTPUT): string {
     $togglelabel = $r->isprotected
-        ? $OUTPUT->pix_icon('t/unlocked', '') . ' Hacer Público'
-        : $OUTPUT->pix_icon('t/locked',   '') . ' Proteger';
+        ? $OUTPUT->pix_icon('t/unlocked', '') . ' ' . get_string('make_public',    'local_scorm_incca')
+        : $OUTPUT->pix_icon('t/locked',   '') . ' ' . get_string('make_protected', 'local_scorm_incca');
     $toggleclass = $r->isprotected
         ? 'btn btn-sm btn-outline-secondary'
         : 'btn btn-sm btn-outline-danger';
@@ -280,12 +278,10 @@ function scorm_incca_toggle_btn(object $r, string $filter, string $search, int $
         'search'  => $search,
         'page'    => $page,
     ]);
-    $confirm = $r->isprotected
-        ? '¿Hacer PÚBLICO este SCORM? Cualquier usuario podrá descargarlo.'
-        : '¿Marcar este SCORM como PROTEGIDO? Solo usuarios con permiso podrán descargarlo.';
+    $confirmkey = $r->isprotected ? 'make_public_confirm' : 'make_protected_confirm';
     return html_writer::link($toggleurl, $togglelabel, [
         'class'   => $toggleclass . ' mr-1',
-        'onclick' => 'return confirm(' . json_encode($confirm) . ')',
+        'onclick' => 'return confirm(' . json_encode(get_string($confirmkey, 'local_scorm_incca')) . ')',
     ]);
 }
 
@@ -322,7 +318,8 @@ function scorm_incca_build_row(object $r, string $filter, string $search, int $p
 
 function scorm_incca_build_card(object $r, string $filter, string $search, int $page, $OUTPUT): string {
     $borderclass = $r->isprotected ? 'border-danger' : 'border-secondary';
-    $badge = scorm_incca_status_badge((bool)$r->isprotected, $OUTPUT);
+    $badge  = scorm_incca_status_badge((bool)$r->isprotected, $OUTPUT);
+    $toggle = scorm_incca_toggle_btn($r, $filter, $search, $page, $OUTPUT);
 
     $scormname = $r->scormname
         ? ($r->cmid

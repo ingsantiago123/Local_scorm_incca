@@ -9,7 +9,7 @@
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->component = 'local_scorm_incca';
-$plugin->version   = 2026052911; // v1.0.14: bloquear backup de SCORMs protegidos
+$plugin->version   = 2026052912; // v1.0.14: block backup of protected SCORMs
 $plugin->requires  = 2024100700; // Moodle 4.5
 $plugin->maturity  = MATURITY_STABLE;
-$plugin->release   = '1.0.12';
+$plugin->release   = '1.0.14';

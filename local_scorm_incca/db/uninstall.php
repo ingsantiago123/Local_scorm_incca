@@ -2,49 +2,49 @@
 defined('MOODLE_INTERNAL') || die();
 
 /**
- * Limpieza completa al desinstalar el plugin.
+ * Full cleanup when the plugin is uninstalled.
  *
- * IMPORTANTE: Esta función se ejecuta ANTES de que Moodle elimine las tablas
- * del plugin (declaradas en install.xml). Limpiamos explícitamente todo para
- * garantizar que no queden remanentes aunque el proceso de Moodle falle.
+ * IMPORTANT: This function runs BEFORE Moodle drops the plugin tables
+ * (declared in install.xml). We explicitly clean everything here to ensure
+ * no data remains even if the Moodle process fails partway through.
  *
- * Lo que limpia esta función:
- *  ✅ Todos los registros de mdl_local_scorm_incca_items
- *  ✅ Todos los registros de mdl_local_scorm_incca_logs
- *  ✅ Archivo de debug log en moodledata
+ * What this function cleans up:
+ *  ✅ All records in mdl_local_scorm_incca_items
+ *  ✅ All records in mdl_local_scorm_incca_logs
+ *  ✅ Debug log file in moodledata
  *
- * Lo que Moodle limpia automáticamente después:
- *  - Las tablas en sí (DROP TABLE)
- *  - Las capabilities declaradas en db/access.php
- *  - Las configuraciones del plugin en mdl_config_plugins
- *  - Los registros de eventos en mdl_events
- *  - Los strings de idioma
+ * What Moodle cleans up automatically afterwards:
+ *  - The tables themselves (DROP TABLE)
+ *  - Capabilities declared in db/access.php
+ *  - Plugin settings in mdl_config_plugins
+ *  - Event records in mdl_events
+ *  - Language strings
  *
- * Lo que NO se toca (a propósito):
- *  - Los paquetes SCORM (mdl_scorm, mdl_course_modules, mdl_files) — no son del plugin
- *  - Los cursos, usuarios, roles, ni nada del núcleo de Moodle
+ * What is intentionally left untouched:
+ *  - SCORM packages (mdl_scorm, mdl_course_modules, mdl_files) — not owned by this plugin
+ *  - Courses, users, roles, or any Moodle core data
  *
- * @return bool true siempre (errores se loguean pero no interrumpen la desinstalación)
+ * @return bool true always (errors are logged but do not interrupt uninstallation)
  */
 function xmldb_local_scorm_incca_uninstall(): bool {
     global $DB, $CFG;
 
     $dbman = $DB->get_manager();
 
-    // ── 1. Limpiar registros de la tabla de items ────────────────────────────
-    // Usamos table_exists() para no romper si la tabla ya fue eliminada en un
-    // intento previo fallido de desinstalación.
+    // ── 1. Clear records from the items table ────────────────────────────────
+    // Use table_exists() to avoid breaking if the table was already dropped
+    // in a previous failed uninstall attempt.
     if ($dbman->table_exists('local_scorm_incca_items')) {
         $DB->delete_records('local_scorm_incca_items');
     }
 
-    // ── 2. Limpiar registros de la tabla de logs ─────────────────────────────
+    // ── 2. Clear records from the logs table ─────────────────────────────────
     if ($dbman->table_exists('local_scorm_incca_logs')) {
         $DB->delete_records('local_scorm_incca_logs');
     }
 
-    // ── 3. Eliminar el archivo de debug log en moodledata ───────────────────
-    // Este archivo lo crea classes/debugger.php y NO está gestionado por Moodle.
+    // ── 3. Remove the debug log file from moodledata ─────────────────────────
+    // This file is created by classes/debugger.php and is NOT managed by Moodle.
     $logfile = rtrim($CFG->dataroot, '/\\') . DIRECTORY_SEPARATOR . 'local_scorm_incca_debug.log';
     if (file_exists($logfile)) {
         @unlink($logfile);
