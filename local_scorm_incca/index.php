@@ -42,12 +42,52 @@ try {
 }
 
 // ── GET parameters ─────────────────────────────────────────────────────────────
-$filter  = optional_param('filter',  'all', PARAM_ALPHA);
-$search  = optional_param('search',  '',    PARAM_TEXT);
-$page    = optional_param('page',    0,     PARAM_INT);
-$perpage = 10;
-$action  = optional_param('action',  '',    PARAM_ALPHA);
-$cmid    = optional_param('cmid',    0,     PARAM_INT);
+$filter   = optional_param('filter',   'all', PARAM_ALPHA);
+$search   = optional_param('search',   '',    PARAM_TEXT);
+$page     = optional_param('page',     0,     PARAM_INT);
+$perpage  = 10;
+$action   = optional_param('action',   '',    PARAM_ALPHANUMEXT);
+$cmid     = optional_param('cmid',     0,     PARAM_INT);
+$courseid = optional_param('courseid', 0,     PARAM_INT);
+
+$coursecontext = null;
+if ($courseid) {
+    $coursecontext = $DB->get_record('course', ['id' => $courseid], 'id, shortname, fullname', IGNORE_MISSING);
+}
+
+// ── SQL: filter + course + search condition ─────────────────────────────────────
+// Built once, up front, and reused both by the "act on everything matching the
+// current filter" bulk actions below and by the listing query at the bottom —
+// single source of truth for what "the current view" means.
+$where = '1=1';
+if ($filter === 'protected') $where = 'i.isprotected = 1';
+if ($filter === 'public')    $where = 'i.isprotected = 0';
+
+$courseparams = [];
+if ($courseid) {
+    $where .= ' AND i.courseid = :filtercourseid';
+    $courseparams = ['filtercourseid' => $courseid];
+}
+
+$searchsql    = '';
+$searchparams = [];
+$searchclean  = trim($search);
+if ($searchclean !== '') {
+    $searchsql =
+        ' AND (' . $DB->sql_like('s.name',     ':searchname',   false) .
+        ' OR '  . $DB->sql_like('c.fullname',  ':searchcourse', false) .
+        ' OR '  . $DB->sql_like('c.shortname', ':searchshort',  false) . ')';
+    $esc = '%' . $DB->sql_like_escape($searchclean) . '%';
+    $searchparams = ['searchname' => $esc, 'searchcourse' => $esc, 'searchshort' => $esc];
+}
+
+$allparams = array_merge($courseparams, $searchparams);
+
+$basesql = "FROM {local_scorm_incca_items} i
+            LEFT JOIN {user}   u ON u.id = i.creatorid
+            LEFT JOIN {course} c ON c.id = i.courseid
+            LEFT JOIN {scorm}  s ON s.id = i.scormid
+            WHERE {$where}{$searchsql}";
 
 // ── POST actions ───────────────────────────────────────────────────────────────
 if ($action === 'toggle' && $cmid && confirm_sesskey()) {
@@ -64,7 +104,7 @@ if ($action === 'toggle' && $cmid && confirm_sesskey()) {
     );
     redirect(
         new moodle_url('/local/scorm_incca/index.php', [
-            'filter' => $filter, 'search' => $search, 'page' => $page,
+            'filter' => $filter, 'search' => $search, 'page' => $page, 'courseid' => $courseid,
         ]),
         get_string($msgkey, 'local_scorm_incca', (object)['cmid' => $cmid]),
         null,
@@ -91,31 +131,52 @@ if ($action === 'cleanup' && confirm_sesskey()) {
     }
 }
 
-// ── SQL: filter + search condition ────────────────────────────────────────────
-$params = [];
-$where  = '1=1';
-if ($filter === 'protected') $where = 'i.isprotected = 1';
-if ($filter === 'public')    $where = 'i.isprotected = 0';
+// ── Bulk actions: specific checkboxes selected on the current page ─────────────
+if (($action === 'bulk_protect' || $action === 'bulk_public') && confirm_sesskey()) {
+    $selected  = optional_param_array('cmids', [], PARAM_INT);
+    $protected = ($action === 'bulk_protect');
 
-$searchsql    = '';
-$searchparams = [];
-$searchclean  = trim($search);
-if ($searchclean !== '') {
-    $searchsql =
-        ' AND (' . $DB->sql_like('s.name',     ':searchname',   false) .
-        ' OR '  . $DB->sql_like('c.fullname',  ':searchcourse', false) .
-        ' OR '  . $DB->sql_like('c.shortname', ':searchshort',  false) . ')';
-    $esc = '%' . $DB->sql_like_escape($searchclean) . '%';
-    $searchparams = ['searchname' => $esc, 'searchcourse' => $esc, 'searchshort' => $esc];
+    if (empty($selected)) {
+        redirect(
+            new moodle_url('/local/scorm_incca/index.php', [
+                'filter' => $filter, 'search' => $search, 'page' => $page, 'courseid' => $courseid,
+            ]),
+            get_string('no_selection_error', 'local_scorm_incca'),
+            null,
+            \core\output\notification::NOTIFY_ERROR
+        );
+    }
+
+    $count  = \local_scorm_incca\helper::bulk_set_protection($selected, $protected, (int)$USER->id);
+    $msgkey = $protected ? 'bulk_changed_to_protected' : 'bulk_changed_to_public';
+    redirect(
+        new moodle_url('/local/scorm_incca/index.php', [
+            'filter' => $filter, 'search' => $search, 'page' => $page, 'courseid' => $courseid,
+        ]),
+        get_string($msgkey, 'local_scorm_incca', $count),
+        null,
+        \core\output\notification::NOTIFY_SUCCESS
+    );
 }
 
-$allparams = array_merge($params, $searchparams);
+// ── Bulk actions: EVERYTHING matching the current filter/search/course, not
+// just the current page. One UPDATE via bulk_set_protection() on the cmids
+// that match — no per-row loop, regardless of how many records match. ─────────
+if (($action === 'bulk_protect_filtered' || $action === 'bulk_public_filtered') && confirm_sesskey()) {
+    $protected = ($action === 'bulk_protect_filtered');
 
-$basesql = "FROM {local_scorm_incca_items} i
-            LEFT JOIN {user}   u ON u.id = i.creatorid
-            LEFT JOIN {course} c ON c.id = i.courseid
-            LEFT JOIN {scorm}  s ON s.id = i.scormid
-            WHERE {$where}{$searchsql}";
+    $ids   = $DB->get_fieldset_sql("SELECT i.cmid {$basesql}", $allparams);
+    $count = \local_scorm_incca\helper::bulk_set_protection($ids, $protected, (int)$USER->id);
+    $msgkey = $protected ? 'bulk_changed_to_protected' : 'bulk_changed_to_public';
+    redirect(
+        new moodle_url('/local/scorm_incca/index.php', [
+            'filter' => $filter, 'search' => $search, 'page' => $page, 'courseid' => $courseid,
+        ]),
+        get_string($msgkey, 'local_scorm_incca', $count),
+        null,
+        \core\output\notification::NOTIFY_SUCCESS
+    );
+}
 
 $total = $DB->count_records_sql("SELECT COUNT(1) {$basesql}", $allparams);
 
@@ -134,9 +195,38 @@ $PAGE->set_title(get_string('protected_list', 'local_scorm_incca'));
 $PAGE->set_heading(get_string('protected_list', 'local_scorm_incca'));
 echo $OUTPUT->header();
 
+echo html_writer::start_div('mb-3');
+echo html_writer::link(
+    new moodle_url('/local/scorm_incca/courses.php'),
+    '🔎 ' . get_string('search_by_course', 'local_scorm_incca'),
+    ['class' => 'btn btn-outline-primary btn-sm']
+);
+echo html_writer::end_div();
+
+if ($coursecontext) {
+    echo $OUTPUT->heading(
+        get_string('filter_by_course', 'local_scorm_incca', format_string($coursecontext->fullname) . ' (' . s($coursecontext->shortname) . ')'),
+        4
+    );
+    echo html_writer::link(
+        new moodle_url('/local/scorm_incca/index.php', ['filter' => $filter, 'search' => $searchclean]),
+        get_string('clear_course_filter', 'local_scorm_incca'),
+        ['class' => 'btn btn-sm btn-outline-secondary mb-3']
+    );
+} else if ($courseid) {
+    // courseid was passed but no such course exists (deleted after sync, etc).
+    $courseid = 0;
+}
+
+// ── Empty-state guidance on first run (no course filter, nothing registered yet) ──
+if ($total === 0 && !$courseid && $searchclean === '' && $filter === 'all') {
+    echo $OUTPUT->notification(get_string('empty_state_help', 'local_scorm_incca'), 'info');
+}
+
 // ── Search bar ────────────────────────────────────────────────────────────────
 echo html_writer::start_tag('form', ['method' => 'get', 'class' => 'mb-3']);
-echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'filter', 'value' => $filter]);
+echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'filter',   'value' => $filter]);
+echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'courseid', 'value' => $courseid]);
 echo html_writer::start_div('input-group');
 echo html_writer::empty_tag('input', [
     'type'         => 'text',
@@ -154,7 +244,7 @@ echo html_writer::empty_tag('input', [
 ]);
 if ($searchclean !== '') {
     echo html_writer::link(
-        new moodle_url('/local/scorm_incca/index.php', ['filter' => $filter]),
+        new moodle_url('/local/scorm_incca/index.php', ['filter' => $filter, 'courseid' => $courseid]),
         '✕',
         ['class' => 'btn btn-outline-secondary', 'title' => get_string('clear_search', 'local_scorm_incca')]
     );
@@ -173,7 +263,7 @@ $filtersMap = [
 ];
 foreach ($filtersMap as $key => $label) {
     $url = new moodle_url('/local/scorm_incca/index.php', [
-        'filter' => $key, 'search' => $searchclean,
+        'filter' => $key, 'search' => $searchclean, 'courseid' => $courseid,
     ]);
     $cls = ($filter === $key) ? 'btn btn-primary mr-1' : 'btn btn-outline-primary mr-1';
     echo html_writer::link($url, $label, ['class' => $cls]);
@@ -211,12 +301,31 @@ if (empty($records)) {
     echo $OUTPUT->notification(get_string('no_records', 'local_scorm_incca'), 'info');
 } else {
 
+    echo html_writer::script("
+        document.addEventListener('change', function(e) {
+            if (e.target && e.target.classList.contains('scormincca-selectall')) {
+                document.querySelectorAll('.scormincca-cb').forEach(function(cb) {
+                    cb.checked = e.target.checked;
+                });
+            }
+        });
+    ");
+
+    echo html_writer::start_tag('form', ['method' => 'post', 'action' => new moodle_url('/local/scorm_incca/index.php')]);
+    echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'sesskey',  'value' => sesskey()]);
+    echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'filter',   'value' => $filter]);
+    echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'search',   'value' => $searchclean]);
+    echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'page',     'value' => $page]);
+    echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'courseid', 'value' => $courseid]);
+
     // ── Table view: md and above ────────────────────────────────────────────
     echo html_writer::start_div('d-none d-md-block');
     echo html_writer::start_div('table-responsive');
 
     $table = new html_table();
     $table->head = [
+        html_writer::empty_tag('input', ['type' => 'checkbox', 'class' => 'scormincca-selectall',
+            'title' => get_string('select_all', 'local_scorm_incca')]),
         get_string('th_status',  'local_scorm_incca'),
         get_string('th_scorm',   'local_scorm_incca'),
         get_string('th_course',  'local_scorm_incca'),
@@ -227,7 +336,7 @@ if (empty($records)) {
     $table->attributes['class'] = 'generaltable table-sm';
 
     foreach ($records as $r) {
-        $table->data[] = scorm_incca_build_row($r, $filter, $searchclean, $page, $OUTPUT);
+        $table->data[] = scorm_incca_build_row($r, $filter, $searchclean, $page, $courseid, $OUTPUT);
     }
     echo html_writer::table($table);
     echo html_writer::end_div(); // table-responsive
@@ -236,13 +345,46 @@ if (empty($records)) {
     // ── Card view: below md ─────────────────────────────────────────────────
     echo html_writer::start_div('d-md-none');
     foreach ($records as $r) {
-        echo scorm_incca_build_card($r, $filter, $searchclean, $page, $OUTPUT);
+        echo scorm_incca_build_card($r, $filter, $searchclean, $page, $courseid, $OUTPUT);
     }
     echo html_writer::end_div();
 
+    // ── Bulk action buttons ─────────────────────────────────────────────────
+    // Two pairs: act on the checkboxes ticked on this page, or act on every
+    // record matching the current filter/search/course — the latter runs as
+    // a single UPDATE server-side (helper::bulk_set_protection), not a loop.
+    echo html_writer::start_div('mt-3 d-flex gap-2 flex-wrap align-items-center');
+
+    echo html_writer::tag('span', get_string('bulk_selected_label', 'local_scorm_incca'), ['class' => 'text-muted small mr-1']);
+    echo html_writer::tag('button', get_string('bulk_protect_selected', 'local_scorm_incca'), [
+        'type' => 'submit', 'name' => 'action', 'value' => 'bulk_protect',
+        'class' => 'btn btn-sm btn-danger',
+        'onclick' => 'return confirm(' . json_encode(get_string('bulk_protect_selected_confirm', 'local_scorm_incca')) . ')',
+    ]);
+    echo html_writer::tag('button', get_string('bulk_public_selected', 'local_scorm_incca'), [
+        'type' => 'submit', 'name' => 'action', 'value' => 'bulk_public',
+        'class' => 'btn btn-sm btn-outline-secondary',
+        'onclick' => 'return confirm(' . json_encode(get_string('bulk_public_selected_confirm', 'local_scorm_incca')) . ')',
+    ]);
+
+    echo html_writer::tag('span', get_string('bulk_filtered_label', 'local_scorm_incca'), ['class' => 'text-muted small mr-1 ml-3']);
+    echo html_writer::tag('button', get_string('bulk_protect_filtered', 'local_scorm_incca'), [
+        'type' => 'submit', 'name' => 'action', 'value' => 'bulk_protect_filtered',
+        'class' => 'btn btn-sm btn-danger',
+        'onclick' => 'return confirm(' . json_encode(get_string('bulk_protect_filtered_confirm', 'local_scorm_incca')) . ')',
+    ]);
+    echo html_writer::tag('button', get_string('bulk_public_filtered', 'local_scorm_incca'), [
+        'type' => 'submit', 'name' => 'action', 'value' => 'bulk_public_filtered',
+        'class' => 'btn btn-sm btn-outline-secondary',
+        'onclick' => 'return confirm(' . json_encode(get_string('bulk_public_filtered_confirm', 'local_scorm_incca')) . ')',
+    ]);
+
+    echo html_writer::end_div();
+    echo html_writer::end_tag('form');
+
     // ── Bottom pagination ───────────────────────────────────────────────────
     $pageurl = new moodle_url('/local/scorm_incca/index.php', [
-        'filter' => $filter, 'search' => $searchclean,
+        'filter' => $filter, 'search' => $searchclean, 'courseid' => $courseid,
     ]);
     echo html_writer::start_div('mt-3');
     echo $OUTPUT->paging_bar($total, $page, $perpage, $pageurl);
@@ -263,7 +405,7 @@ function scorm_incca_status_badge(bool $isprotected, $OUTPUT): string {
             ['class' => 'badge badge-secondary', 'style' => 'font-size:11px']);
 }
 
-function scorm_incca_toggle_btn(object $r, string $filter, string $search, int $page, $OUTPUT): string {
+function scorm_incca_toggle_btn(object $r, string $filter, string $search, int $page, int $courseid, $OUTPUT): string {
     $togglelabel = $r->isprotected
         ? $OUTPUT->pix_icon('t/unlocked', '') . ' ' . get_string('make_public',    'local_scorm_incca')
         : $OUTPUT->pix_icon('t/locked',   '') . ' ' . get_string('make_protected', 'local_scorm_incca');
@@ -271,12 +413,13 @@ function scorm_incca_toggle_btn(object $r, string $filter, string $search, int $
         ? 'btn btn-sm btn-outline-secondary'
         : 'btn btn-sm btn-outline-danger';
     $toggleurl = new moodle_url('/local/scorm_incca/index.php', [
-        'action'  => 'toggle',
-        'cmid'    => $r->cmid,
-        'sesskey' => sesskey(),
-        'filter'  => $filter,
-        'search'  => $search,
-        'page'    => $page,
+        'action'   => 'toggle',
+        'cmid'     => $r->cmid,
+        'sesskey'  => sesskey(),
+        'filter'   => $filter,
+        'search'   => $search,
+        'page'     => $page,
+        'courseid' => $courseid,
     ]);
     $confirmkey = $r->isprotected ? 'make_public_confirm' : 'make_protected_confirm';
     return html_writer::link($toggleurl, $togglelabel, [
@@ -285,7 +428,13 @@ function scorm_incca_toggle_btn(object $r, string $filter, string $search, int $
     ]);
 }
 
-function scorm_incca_build_row(object $r, string $filter, string $search, int $page, $OUTPUT): array {
+function scorm_incca_checkbox(object $r): string {
+    return html_writer::empty_tag('input', [
+        'type' => 'checkbox', 'name' => 'cmids[]', 'value' => $r->cmid, 'class' => 'scormincca-cb',
+    ]);
+}
+
+function scorm_incca_build_row(object $r, string $filter, string $search, int $page, int $courseid, $OUTPUT): array {
     $statusbadge = scorm_incca_status_badge((bool)$r->isprotected, $OUTPUT);
 
     $scormlink = ($r->cmid && $r->scormname)
@@ -306,20 +455,20 @@ function scorm_incca_build_row(object $r, string $filter, string $search, int $p
             html_writer::tag('small', s($r->email), ['class' => 'text-muted']);
     }
 
-    $actions  = scorm_incca_toggle_btn($r, $filter, $search, $page, $OUTPUT);
+    $actions  = scorm_incca_toggle_btn($r, $filter, $search, $page, $courseid, $OUTPUT);
     $actions .= html_writer::link(
         new moodle_url('/local/scorm_incca/logs.php', ['cmid' => $r->cmid]),
         get_string('view_logs', 'local_scorm_incca'),
         ['class' => 'btn btn-sm btn-secondary']
     );
 
-    return [$statusbadge, $scormlink, $courselink, $creator ?: '-', userdate($r->timecreated), $actions];
+    return [scorm_incca_checkbox($r), $statusbadge, $scormlink, $courselink, $creator ?: '-', userdate($r->timecreated), $actions];
 }
 
-function scorm_incca_build_card(object $r, string $filter, string $search, int $page, $OUTPUT): string {
+function scorm_incca_build_card(object $r, string $filter, string $search, int $page, int $courseid, $OUTPUT): string {
     $borderclass = $r->isprotected ? 'border-danger' : 'border-secondary';
     $badge  = scorm_incca_status_badge((bool)$r->isprotected, $OUTPUT);
-    $toggle = scorm_incca_toggle_btn($r, $filter, $search, $page, $OUTPUT);
+    $toggle = scorm_incca_toggle_btn($r, $filter, $search, $page, $courseid, $OUTPUT);
 
     $scormname = $r->scormname
         ? ($r->cmid
@@ -335,8 +484,7 @@ function scorm_incca_build_card(object $r, string $filter, string $search, int $
 
     $creator = trim(($r->firstname ?? '') . ' ' . ($r->lastname ?? '')) ?: '-';
 
-    $toggle = scorm_incca_toggle_btn($r, $filter, $search, $page, $OUTPUT);
-    $logs   = html_writer::link(
+    $logs = html_writer::link(
         new moodle_url('/local/scorm_incca/logs.php', ['cmid' => $r->cmid]),
         get_string('view_logs', 'local_scorm_incca'),
         ['class' => 'btn btn-sm btn-secondary']
@@ -345,16 +493,17 @@ function scorm_incca_build_card(object $r, string $filter, string $search, int $
     return html_writer::div(
         html_writer::div(
             html_writer::div(
-                html_writer::tag('h6', $scormname, ['class' => 'card-title mb-1']) .
+                scorm_incca_checkbox($r) . ' ' .
+                html_writer::tag('h6', $scormname, ['class' => 'card-title mb-1 d-inline-block']) .
                 html_writer::tag('p', $badge, ['class' => 'mb-1']) .
                 html_writer::tag('p',
-                    html_writer::tag('small', '📚 ' . $coursename, ['class' => 'text-muted']),
+                    html_writer::tag('small', '📚' . $coursename, ['class' => 'text-muted']),
                     ['class' => 'mb-1']) .
                 html_writer::tag('p',
-                    html_writer::tag('small', '👤 ' . s($creator), ['class' => 'text-muted']),
+                    html_writer::tag('small', '👤' . s($creator), ['class' => 'text-muted']),
                     ['class' => 'mb-1']) .
                 html_writer::tag('p',
-                    html_writer::tag('small', '🕐 ' . userdate($r->timecreated), ['class' => 'text-muted']),
+                    html_writer::tag('small', '🕐' . userdate($r->timecreated), ['class' => 'text-muted']),
                     ['class' => 'mb-2']) .
                 html_writer::div($toggle . $logs, 'd-flex flex-wrap gap-1'),
             'card-body py-2')

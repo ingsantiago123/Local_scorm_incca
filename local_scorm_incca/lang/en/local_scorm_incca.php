@@ -25,6 +25,7 @@ $string['protected_list']       = 'Registered SCORM packages';
 $string['logs']                 = 'Debug logs';
 $string['users_with_caps']      = 'Users with custom capabilities';
 $string['users_with_caps_help'] = 'List of users assigned to roles holding the plugin custom capabilities.';
+$string['search_by_course']     = 'Search by course';
 
 // Items table headers.
 $string['th_status']  = 'Status';
@@ -45,6 +46,42 @@ $string['filter_by_cmid']   = 'Filter by cmid';
 
 $string['no_records'] = 'No SCORM packages registered for the selected filter.';
 $string['view_logs']  = 'View logs';
+
+// Course search / on-demand sync (courses.php).
+$string['search_by_course_help']  = 'Enter the EXACT shortname of a course to find its SCORM packages and register the ones the plugin does not track yet. This is an exact match, not a partial search — new packages are registered as PUBLIC once found; protect the ones that need it from the list below.';
+$string['shortname_placeholder']  = 'Exact course shortname...';
+$string['no_courses_found']       = 'No course found with that exact shortname.';
+$string['th_shortname']           = 'Shortname';
+$string['th_scorm_count']         = 'SCORM packages found';
+$string['th_sync_status']         = 'Sync status';
+$string['sync_status_done']       = '{$a} synced';
+$string['sync_status_pending']    = 'Pending sync';
+$string['sync_status_none']       = 'No SCORM packages';
+$string['sync_now']               = 'Sync';
+$string['view_items']             = 'View packages';
+$string['sync_result']            = '{$a->count} new SCORM package(s) registered for course "{$a->shortname}" (as PUBLIC — review and protect as needed).';
+$string['sync_zero_result']       = 'Course "{$a->shortname}" is already fully synced. No new packages found.';
+
+// Course filter banner + empty state on index.php.
+$string['filter_by_course']       = 'Course: {$a}';
+$string['clear_course_filter']    = 'Clear course filter';
+$string['empty_state_help']       = 'No SCORM packages have been synced yet. Use "Search by course" to look up a course by its shortname and register its SCORM packages.';
+
+// Bulk protect / make public (index.php).
+$string['select_all']                    = 'Select all';
+$string['no_selection_error']            = 'Select at least one SCORM package first.';
+$string['bulk_selected_label']           = 'Selected:';
+$string['bulk_protect_selected']         = 'Protect selected';
+$string['bulk_protect_selected_confirm'] = 'Mark all selected SCORM packages as PROTECTED?';
+$string['bulk_public_selected']          = 'Make selected public';
+$string['bulk_public_selected_confirm']  = 'Mark all selected SCORM packages as PUBLIC?';
+$string['bulk_filtered_label']           = 'Current view:';
+$string['bulk_protect_filtered']         = 'Protect ALL matching';
+$string['bulk_protect_filtered_confirm'] = 'Mark EVERY SCORM package matching the current filter/search as PROTECTED? This may affect many records.';
+$string['bulk_public_filtered']          = 'Make ALL matching public';
+$string['bulk_public_filtered_confirm']  = 'Mark EVERY SCORM package matching the current filter/search as PUBLIC? This may affect many records.';
+$string['bulk_changed_to_protected']     = '{$a} SCORM package(s) marked as PROTECTED.';
+$string['bulk_changed_to_public']        = '{$a} SCORM package(s) marked as PUBLIC.';
 
 // Logs table headers.
 $string['th_when']      = 'When';
@@ -69,6 +106,7 @@ $string['log_error']             = 'Error';
 $string['log_delete_blocked']    = 'Deletion blocked';
 $string['log_unzip_blocked']     = 'Unzip blocked';
 $string['log_import_registered'] = 'Imported';
+$string['log_course_synced']     = 'Course synced';
 
 // Search.
 $string['search_placeholder'] = 'Search by SCORM name or course...';

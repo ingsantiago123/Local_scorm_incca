@@ -25,6 +25,7 @@ $string['protected_list']       = 'Paquetes SCORM registrados';
 $string['logs']                 = 'Registros de depuración';
 $string['users_with_caps']      = 'Usuarios con permisos personalizados';
 $string['users_with_caps_help'] = 'Listado de usuarios que tienen asignados los roles con los permisos personalizados del plugin.';
+$string['search_by_course']     = 'Buscar por curso';
 
 // Items table headers.
 $string['th_status']  = 'Estado';
@@ -45,6 +46,42 @@ $string['filter_by_cmid']   = 'Filtrar por cmid';
 
 $string['no_records'] = 'No hay paquetes SCORM registrados para el filtro seleccionado.';
 $string['view_logs']  = 'Ver registros';
+
+// Búsqueda de cursos / sincronización bajo demanda (courses.php).
+$string['search_by_course_help']  = 'Ingrese el shortname EXACTO de un curso para localizar sus paquetes SCORM y registrar los que el plugin aún no rastrea. Es una búsqueda exacta, no parcial — los paquetes nuevos se registran como PÚBLICOS al encontrarlos; proteja los que lo requieran desde el listado.';
+$string['shortname_placeholder']  = 'Shortname exacto del curso...';
+$string['no_courses_found']       = 'No se encontró ningún curso con ese shortname exacto.';
+$string['th_shortname']           = 'Shortname';
+$string['th_scorm_count']         = 'Paquetes SCORM encontrados';
+$string['th_sync_status']         = 'Estado de sincronización';
+$string['sync_status_done']       = '{$a} sincronizados';
+$string['sync_status_pending']    = 'Sincronización pendiente';
+$string['sync_status_none']       = 'Sin paquetes SCORM';
+$string['sync_now']               = 'Sincronizar';
+$string['view_items']             = 'Ver paquetes';
+$string['sync_result']            = '{$a->count} paquete(s) SCORM nuevo(s) registrado(s) para el curso "{$a->shortname}" (como PÚBLICO — revise y proteja según corresponda).';
+$string['sync_zero_result']       = 'El curso "{$a->shortname}" ya está completamente sincronizado. No se encontraron paquetes nuevos.';
+
+// Banner de filtro por curso + estado vacío en index.php.
+$string['filter_by_course']       = 'Curso: {$a}';
+$string['clear_course_filter']    = 'Quitar filtro de curso';
+$string['empty_state_help']       = 'Aún no se ha sincronizado ningún paquete SCORM. Use "Buscar por curso" para localizar un curso por su shortname y registrar sus paquetes SCORM.';
+
+// Protección masiva (index.php).
+$string['select_all']                    = 'Seleccionar todos';
+$string['no_selection_error']            = 'Seleccione al menos un paquete SCORM primero.';
+$string['bulk_selected_label']           = 'Seleccionados:';
+$string['bulk_protect_selected']         = 'Proteger seleccionados';
+$string['bulk_protect_selected_confirm'] = '¿Marcar todos los paquetes SCORM seleccionados como PROTEGIDOS?';
+$string['bulk_public_selected']          = 'Hacer públicos los seleccionados';
+$string['bulk_public_selected_confirm']  = '¿Marcar todos los paquetes SCORM seleccionados como PÚBLICOS?';
+$string['bulk_filtered_label']           = 'Vista actual:';
+$string['bulk_protect_filtered']         = 'Proteger TODOS los que coinciden';
+$string['bulk_protect_filtered_confirm'] = '¿Marcar TODOS los paquetes SCORM que coinciden con el filtro/búsqueda actual como PROTEGIDOS? Esto puede afectar muchos registros.';
+$string['bulk_public_filtered']          = 'Hacer públicos TODOS los que coinciden';
+$string['bulk_public_filtered_confirm']  = '¿Marcar TODOS los paquetes SCORM que coinciden con el filtro/búsqueda actual como PÚBLICOS? Esto puede afectar muchos registros.';
+$string['bulk_changed_to_protected']     = '{$a} paquete(s) SCORM marcado(s) como PROTEGIDO.';
+$string['bulk_changed_to_public']        = '{$a} paquete(s) SCORM marcado(s) como PÚBLICO.';
 
 // Logs table headers.
 $string['th_when']      = 'Fecha';
@@ -69,6 +106,7 @@ $string['log_error']             = 'Error';
 $string['log_delete_blocked']    = 'Eliminación bloqueada';
 $string['log_unzip_blocked']     = 'Descompresión bloqueada';
 $string['log_import_registered'] = 'Importado';
+$string['log_course_synced']     = 'Curso sincronizado';
 
 // Search.
 $string['search_placeholder'] = 'Buscar por nombre de SCORM o curso...';

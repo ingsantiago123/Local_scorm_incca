@@ -34,6 +34,7 @@ $eventtypes = [
     \local_scorm_incca\helper::LOG_DELETE_BLOCKED    => get_string('log_delete_blocked',     'local_scorm_incca'),
     \local_scorm_incca\helper::LOG_UNZIP_BLOCKED     => get_string('log_unzip_blocked',      'local_scorm_incca'),
     \local_scorm_incca\helper::LOG_IMPORT_REGISTERED => get_string('log_import_registered',  'local_scorm_incca'),
+    \local_scorm_incca\helper::LOG_COURSE_SYNCED     => get_string('log_course_synced',      'local_scorm_incca'),
 ];
 
 echo html_writer::start_tag('form', ['method' => 'get', 'class' => 'mb-3']);
@@ -127,6 +128,7 @@ if (empty($records)) {
         'delete_blocked'     => 'badge-danger',
         'unzip_blocked'      => 'badge-warning',
         'import_registered'  => 'badge-primary',
+        'course_synced'      => 'badge-info',
     ];
 
     // ── Table view: md and above ───────────────────────────────────────────

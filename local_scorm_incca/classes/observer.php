@@ -62,11 +62,21 @@ class observer {
         $importerid   = (int) $event->userid;
         $sourcecourse = (int) ($event->other['originalcourseid'] ?? 0);
 
+        // TEMPORARY diagnostic — writes unconditionally (ignores debugger::ENABLED) to
+        // {moodledata}/local_scorm_incca_diag.log. Remove once the import-registration
+        // issue is confirmed fixed; see debugger::logDiag() doc comment.
+        debugger::logDiag('COURSE_RESTORED', [
+            'destcourseid' => $destcourseid,
+            'importerid'   => $importerid,
+            'sourcecourse' => $sourcecourse,
+            'other_raw'    => $event->other,
+        ]);
+
         try {
             helper::register_imported_scorms($destcourseid, $importerid, $sourcecourse);
         } catch (\Throwable $e) {
             helper::log(helper::LOG_ERROR, $importerid, 0,
-                'course_restored handler: ' . $e->getMessage());
+                'course_restored handler: ' . $e->getMessage() . ' | trace=' . $e->getTraceAsString());
         }
     }
 

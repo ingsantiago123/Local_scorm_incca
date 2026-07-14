@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<XMLDB PATH="local/scorm_incca/db" VERSION="20260526" COMMENT="Tablas del plugin local_scorm_incca">
+<XMLDB PATH="local/scorm_incca/db" VERSION="20260709" COMMENT="Tablas del plugin local_scorm_incca">
   <TABLES>
 
     <TABLE NAME="local_scorm_incca_items" COMMENT="Registro de paquetes SCORM y su estado de proteccion">
@@ -20,6 +20,7 @@
       <INDEXES>
         <INDEX NAME="isprotected" UNIQUE="false" FIELDS="isprotected"/>
         <INDEX NAME="creatorid"   UNIQUE="false" FIELDS="creatorid"/>
+        <INDEX NAME="courseid"    UNIQUE="false" FIELDS="courseid"/>
       </INDEXES>
     </TABLE>
 

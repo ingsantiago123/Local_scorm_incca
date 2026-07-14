@@ -17,6 +17,13 @@ if ($hassiteconfig) {
     ));
 
     $ADMIN->add('local_scorm_incca_category', new admin_externalpage(
+        'local_scorm_incca_courses',
+        get_string('search_by_course', 'local_scorm_incca'),
+        new moodle_url('/local/scorm_incca/courses.php'),
+        'local/scorm_incca:viewadminpanel'
+    ));
+
+    $ADMIN->add('local_scorm_incca_category', new admin_externalpage(
         'local_scorm_incca_logs',
         get_string('logs', 'local_scorm_incca'),
         new moodle_url('/local/scorm_incca/logs.php'),
